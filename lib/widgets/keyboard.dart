@@ -26,29 +26,26 @@ class KeyboardView extends StatelessWidget {
 
     return LayoutBuilder(builder: (context, constraints) {
       final w = constraints.maxWidth;
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: p.keyBlack,
-          borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(8), bottom: Radius.circular(10)),
-        ),
-        padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+      return SizedBox(
+        height: 172,
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            Row(
-              children: [
-                for (final s in _whiteSemitones)
-                  Expanded(child: _whiteKey(p, c, s)),
-              ],
+            Positioned.fill(
+              top: 8,
+              child: Row(
+                children: [
+                  for (final s in _whiteSemitones)
+                    Expanded(child: _whiteKey(p, c, s)),
+                ],
+              ),
             ),
             for (final (semitone, n) in _blackKeys)
               Positioned(
-                left: (w - 8) * (n / 7) - (w - 8) * 0.043,
+                left: w * (n / 7) - w * 0.045,
                 top: 0,
-                width: (w - 8) * 0.086,
-                height: 116,
+                width: w * 0.09,
+                height: 96,
                 child: _blackKey(p, c, semitone),
               ),
           ],
@@ -75,14 +72,18 @@ class KeyboardView extends StatelessWidget {
     Color bg = enabled ? p.keyWhite : p.keyDisabled;
     Color fg = enabled ? p.muted : p.keyBlackDisabled;
     Color edge = p.keyWhiteEdge;
+    Color shadow = p.btnShadow;
+    var shadowed = enabled;
     if (flash != null) {
       bg = Color.lerp(p.keyWhite, flash, 0.35)!;
       fg = flash;
       edge = flash;
+      shadow = flash;
     } else if (held) {
-      bg = p.accentSoft;
-      fg = p.accent;
+      bg = p.keyHeld;
+      fg = p.keyHeldText;
       edge = p.accent;
+      shadow = p.accentShadow;
     }
 
     return Listener(
@@ -93,50 +94,54 @@ class KeyboardView extends StatelessWidget {
         cursor:
             enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 1.5),
+          margin: const EdgeInsets.symmetric(horizontal: 3),
           decoration: BoxDecoration(
             color: bg,
-            border: Border.all(color: edge),
-            borderRadius:
-                const BorderRadius.vertical(bottom: Radius.circular(6)),
+            border: Border.all(color: edge, width: 2.5),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(12),
+              topRight: Radius.circular(12),
+              bottomLeft: Radius.circular(18),
+              bottomRight: Radius.circular(18),
+            ),
+            boxShadow: shadowed
+                ? [BoxShadow(color: shadow, offset: const Offset(0, 4))]
+                : null,
           ),
           alignment: Alignment.bottomCenter,
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 9),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 Pitch(semitone).label,
                 style: TextStyle(
-                  fontSize: 13,
-                  fontFamily: 'monospace',
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
                   color: fg,
-                  fontWeight: (held || flash != null)
-                      ? FontWeight.w700
-                      : FontWeight.w400,
                 ),
               ),
               const SizedBox(height: 3),
-              _letterBadge(p, semitone, enabled, fg),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                      color: enabled ? fg.withValues(alpha: 0.5) : fg,
+                      width: 1.5),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(
+                  keyboardLetters[semitone],
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: fg),
+                ),
+              ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _letterBadge(Palette p, int semitone, bool enabled, Color fg) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        border: Border.all(
-            color: enabled ? fg.withValues(alpha: 0.5) : fg),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        keyboardLetters[semitone],
-        style: TextStyle(
-            fontSize: 10, fontFamily: 'monospace', color: fg),
       ),
     );
   }
@@ -147,12 +152,14 @@ class KeyboardView extends StatelessWidget {
     final flash = _flashColor(p, semitone);
 
     Color bg = enabled ? p.keyBlack : p.keyBlackDisabled;
-    Color fg = enabled ? p.keyWhite : p.keyDisabled;
+    Color fg = enabled ? const Color(0xFFDCEBF7) : p.keyDisabled;
+    Color shadow = p.keyBlackShadow;
     if (flash != null) {
       bg = Color.lerp(p.keyBlack, flash, 0.55)!;
+      shadow = flash;
     } else if (held) {
-      bg = Color.lerp(p.keyBlack, p.accent, 0.5)!;
-      fg = p.keyWhite;
+      bg = Color.lerp(p.keyBlack, p.accent, 0.55)!;
+      shadow = p.accentShadow;
     }
 
     return Listener(
@@ -165,15 +172,14 @@ class KeyboardView extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             color: bg,
-            borderRadius:
-                const BorderRadius.vertical(bottom: Radius.circular(5)),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8),
+              bottomLeft: Radius.circular(12),
+              bottomRight: Radius.circular(12),
+            ),
             boxShadow: enabled
-                ? const [
-                    BoxShadow(
-                        color: Color(0x59000000),
-                        offset: Offset(0, 3),
-                        blurRadius: 6)
-                  ]
+                ? [BoxShadow(color: shadow, offset: const Offset(0, 4))]
                 : null,
           ),
           alignment: Alignment.bottomCenter,
@@ -184,13 +190,13 @@ class KeyboardView extends StatelessWidget {
               Text(
                 pitchClassLabels[semitone],
                 style: TextStyle(
-                    fontSize: 11, fontFamily: 'monospace', color: fg),
+                    fontSize: 11, fontWeight: FontWeight.w700, color: fg),
               ),
               Text(
                 keyboardLetters[semitone],
                 style: TextStyle(
                     fontSize: 9,
-                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w700,
                     color: fg.withValues(alpha: 0.75)),
               ),
             ],

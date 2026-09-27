@@ -30,6 +30,8 @@ class GameController extends ChangeNotifier {
   int roundPitchCorrect = 0;
   int roundOnTime = 0;
   int roundPitchTotal = 0;
+  bool lastRoundSkipped = false; // skipped rounds don't get a result pop
+  int attempt = 0; // increments every started timeline (incl. replays)
 
   // Timeline (beats from _t0 at AudioContext time).
   double _t0 = 0;
@@ -51,6 +53,10 @@ class GameController extends ChangeNotifier {
   // Held notes (mouse or computer keyboard), semitone → sounding voice.
   final Map<int, Voice> _held = {};
   Set<int> get heldSemitones => _held.keys.toSet();
+
+  /// Paused: the audio context is suspended, freezing the round timeline,
+  /// scheduled notes, and metronome exactly in place.
+  bool paused = false;
 
   // Free play mode.
   bool freePlay = false;
@@ -90,20 +96,37 @@ class GameController extends ChangeNotifier {
     _startTimeline();
   }
 
+  void togglePause() {
+    if (!paused && !phase.isActiveRound) return;
+    paused = !paused;
+    if (paused) {
+      engine.pause();
+    } else {
+      engine.unpause();
+    }
+    notifyListeners();
+  }
+
+  void _clearPause() {
+    if (paused) {
+      paused = false;
+      engine.unpause();
+    }
+  }
+
   void skip() {
     if (!phase.isActiveRound) return;
+    _clearPause();
+    lastRoundSkipped = true;
     _finish();
   }
 
-  void hearTonic() {
-    engine.unlock();
-    engine.scheduleNote(
-        const Pitch(0).frequency, settings.tone, engine.now + 0.02, 1.0);
-  }
-
   void _startTimeline() {
+    _clearPause();
     engine.unlock();
     _stopMetronome();
+    lastRoundSkipped = false;
+    attempt++;
     final m = melody!;
     judged = [for (final e in m.events) JudgedEvent(e)];
     roundPitchTotal = m.pitchEvents.length;
@@ -234,6 +257,7 @@ class GameController extends ChangeNotifier {
 
   /// Note-on from mouse or computer keyboard. Sounds until [noteOff].
   void noteOn(int semitone) {
+    if (paused) return;
     if (_held.containsKey(semitone)) return; // key auto-repeat / double press
     if (!settings.noteSet.contains(semitone)) return;
     if (!freePlay && !keysActive) return;
@@ -263,6 +287,7 @@ class GameController extends ChangeNotifier {
 
   void setFreePlay(bool value) {
     if (freePlay == value) return;
+    _clearPause();
     freePlay = value;
     _ticker?.cancel();
     _ticker = null;
@@ -282,6 +307,7 @@ class GameController extends ChangeNotifier {
 
   void toggleMetronome() {
     if (!freePlay) return;
+    _clearPause();
     if (metronomeOn) {
       _stopMetronome();
     } else {

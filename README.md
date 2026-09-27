@@ -1,8 +1,8 @@
-# Ear Trainer
+# Skylark
 
 A browser-based melodic and rhythmic dictation game, built with Flutter web.
 
-**Live**: https://dwightexmachina.github.io/eartrainer/
+**Live**: https://dwightexmachina.github.io/skylark/
 
 ## How it plays
 
@@ -31,6 +31,6 @@ flutter build web             # release bundle in build/web
 
 Deployment is automatic: every push to `main` triggers the GitHub Actions
 workflow in `.github/workflows/deploy.yml`, which builds with
-`--base-href "/eartrainer/"` and publishes to GitHub Pages.
+`--base-href "/skylark/"` and publishes to GitHub Pages.
 
 Analytics: shared Cloudflare Web Analytics beacon — see `ANALYTICS.md`.

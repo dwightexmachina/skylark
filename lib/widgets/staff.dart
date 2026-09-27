@@ -107,7 +107,8 @@ class _StaffPainter extends CustomPainter {
     _measureW = (size.width - xLeft - 10) / measures;
     final staffPaint = Paint()
       ..color = palette.staff
-      ..strokeWidth = 1;
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
 
     for (var i = 0; i < 5; i++) {
       final y = y0 + i * g;
@@ -115,20 +116,20 @@ class _StaffPainter extends CustomPainter {
     }
     final barPaint = Paint()
       ..color = palette.staff
-      ..strokeWidth = 1.4;
+      ..strokeWidth = 2.2;
     for (var m = 0; m <= measures; m++) {
       final x = m == 0 ? 12.0 : xLeft + m * _measureW;
       canvas.drawLine(Offset(x, y0), Offset(x, y0 + 4 * g), barPaint);
     }
     // Final thick barline.
     canvas.drawLine(Offset(size.width - 6, y0), Offset(size.width - 6, y0 + 4 * g),
-        Paint()..color = palette.staff..strokeWidth = 3);
+        Paint()..color = palette.staffInk.withValues(alpha: 0.55)..strokeWidth = 4);
 
     // Stylized treble clef (drawn, since music glyphs aren't in web fonts).
     _drawClef(canvas);
-    _text(canvas, '4', Offset(56, y0 - 4), 22, palette.staff,
+    _text(canvas, '4', Offset(56, y0 - 4), 22, palette.staffInk,
         weight: FontWeight.w700);
-    _text(canvas, '4', Offset(56, y0 + 2 * g - 4), 22, palette.staff,
+    _text(canvas, '4', Offset(56, y0 + 2 * g - 4), 22, palette.staffInk,
         weight: FontWeight.w700);
 
     for (var i = 0; i < judged.length; i++) {
@@ -150,19 +151,27 @@ class _StaffPainter extends CustomPainter {
       final x = _beatToX(playheadBeat!.clamp(0, measures * 4 - 0.001));
       final paint = Paint()
         ..color = palette.accent
-        ..strokeWidth = 1.6;
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round;
       // Dashed vertical line.
-      var y = y0 - 8.0;
+      var y = y0 - 2.0;
       while (y < y0 + 4 * g + 10) {
         canvas.drawLine(Offset(x, y), Offset(x, y + 5), paint);
-        y += 9;
+        y += 11;
       }
-      final cap = Path()
-        ..moveTo(x - 5, y0 - 14)
-        ..lineTo(x + 5, y0 - 14)
-        ..lineTo(x, y0 - 7)
-        ..close();
-      canvas.drawPath(cap, Paint()..color = palette.accent);
+      // A little sun as the playhead cap.
+      final sun = Paint()..color = palette.accent;
+      canvas.drawCircle(Offset(x, y0 - 14), 6.5, sun);
+      final ray = Paint()
+        ..color = palette.accent
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(Offset(x, y0 - 26), Offset(x, y0 - 23), ray);
+      canvas.drawLine(Offset(x - 11, y0 - 14), Offset(x - 8, y0 - 14), ray);
+      canvas.drawLine(Offset(x + 8, y0 - 14), Offset(x + 11, y0 - 14), ray);
+      canvas.drawLine(
+          Offset(x - 8, y0 - 22), Offset(x - 6, y0 - 20), ray);
+      canvas.drawLine(Offset(x + 6, y0 - 20), Offset(x + 8, y0 - 22), ray);
     }
   }
 
@@ -176,9 +185,9 @@ class _StaffPainter extends CustomPainter {
   void _drawClef(Canvas canvas) {
     const cx = 32.0;
     final paint = Paint()
-      ..color = palette.staff
+      ..color = palette.staffInk
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
+      ..strokeWidth = 2.8
       ..strokeCap = StrokeCap.round;
     final p = Path()
       // Tall S-curve from above the staff down through it…
@@ -191,9 +200,9 @@ class _StaffPainter extends CustomPainter {
     canvas.drawPath(p, paint);
     // Stem down to the tail dot below the staff.
     canvas.drawLine(Offset(cx + 3, y0 - 16), Offset(cx + 3, y0 + 4 * g + 6),
-        Paint()..color = palette.staff..strokeWidth = 1.6);
-    canvas.drawCircle(Offset(cx + 1, y0 + 4 * g + 7), 2.4,
-        Paint()..color = palette.staff);
+        Paint()..color = palette.staffInk..strokeWidth = 2.2);
+    canvas.drawCircle(Offset(cx + 1, y0 + 4 * g + 7), 2.6,
+        Paint()..color = palette.staffInk);
   }
 
   void _drawRest(Canvas canvas, NoteEvent e) {
@@ -225,7 +234,7 @@ class _StaffPainter extends CustomPainter {
     // Ledger line for C4.
     if (pitch.letter == 0) {
       canvas.drawLine(Offset(x - 11, y), Offset(x + 11, y),
-          Paint()..color = palette.staff..strokeWidth = 1.2);
+          Paint()..color = palette.staff..strokeWidth = 2);
     }
 
     canvas.save();

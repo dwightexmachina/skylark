@@ -2,7 +2,7 @@
 
 Every Claude app on **`dwightexmachina.github.io`** shares **one** Cloudflare
 Web Analytics beacon → a single dashboard. You tell projects apart by filtering
-on the URL path (`/eartrainer/`, `/mindyourlanguage/`, `/sirmixalot/`, …).
+on the URL path (`/skylark/`, `/mindyourlanguage/`, `/sirmixalot/`, …).
 
 Dashboard: Cloudflare → **Analytics & Logs → Web Analytics → dwightexmachina.github.io**
 

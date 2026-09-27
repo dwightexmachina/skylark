@@ -4,10 +4,15 @@ import 'package:flutter/services.dart';
 import '../models/note.dart';
 import '../models/round.dart';
 import '../state/game_controller.dart';
+import '../state/tutorial_controller.dart';
 import '../ui/palette.dart';
 import 'keyboard.dart';
+import 'lark.dart';
+import 'result_pop.dart';
 import 'settings_panel.dart';
+import 'splash_screen.dart';
 import 'staff.dart';
+import 'tutorial_overlay.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
@@ -18,6 +23,47 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   final GameController controller = GameController();
+  late final TutorialController tutorial = TutorialController(controller);
+
+  // Anchors for the tutorial spotlight.
+  final GlobalKey _rootKey = GlobalKey();
+  final GlobalKey _keyboardKey = GlobalKey();
+  final GlobalKey _playKey = GlobalKey();
+  final GlobalKey _scoreKey = GlobalKey();
+  final GlobalKey _settingsKey = GlobalKey();
+  final ValueNotifier<int> _scrollTick = ValueNotifier(0);
+
+  bool _splashVisible = true;
+  final GlobalKey<SplashScreenState> _splashKey = GlobalKey();
+
+  /// Timeline attempt whose result pop was dismissed (-1 = none).
+  /// [GameController.attempt] increments on every start (incl. replays),
+  /// so each attempt gets exactly one pop.
+  int _popDismissedForAttempt = -1;
+
+  bool get _resultPopVisible {
+    final c = controller;
+    return c.phase == Phase.summary &&
+        !c.freePlay &&
+        !c.lastRoundSkipped &&
+        c.attempt != _popDismissedForAttempt &&
+        !tutorial.popupVisible;
+  }
+
+  ResultTier get _resultTier {
+    final c = controller;
+    if (c.roundPitchTotal > 0 &&
+        c.roundPitchCorrect == c.roundPitchTotal &&
+        c.roundOnTime == c.roundPitchTotal) {
+      return ResultTier.perfect;
+    }
+    if (c.roundPitchCorrect * 2 >= c.roundPitchTotal) return ResultTier.good;
+    return ResultTier.lost;
+  }
+
+  void _dismissPop() {
+    setState(() => _popDismissedForAttempt = controller.attempt);
+  }
 
   static final Map<LogicalKeyboardKey, int> _keyMap = {
     LogicalKeyboardKey.keyA: 0,
@@ -35,6 +81,22 @@ class _GameScreenState extends State<GameScreen> {
   };
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    // Any key dismisses the splash.
+    if (_splashVisible) {
+      if (event is KeyDownEvent) _splashKey.currentState?.close();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (event is KeyDownEvent && tutorial.popupVisible) {
+        tutorial.skip();
+        return KeyEventResult.handled;
+      }
+      if (event is KeyDownEvent && _resultPopVisible) {
+        _dismissPop();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
     final semitone = _keyMap[event.logicalKey];
     if (semitone == null) return KeyEventResult.ignored;
     if (event is KeyDownEvent) {
@@ -47,7 +109,9 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   void dispose() {
+    tutorial.dispose();
     controller.dispose();
+    _scrollTick.dispose();
     super.dispose();
   }
 
@@ -56,56 +120,136 @@ class _GameScreenState extends State<GameScreen> {
     final p = Palette.of(context);
     return Scaffold(
       backgroundColor: p.bg,
-      body: Focus(
+      body: SizedBox.expand(
+        child: Focus(
         autofocus: true,
         onKeyEvent: _onKeyEvent,
-        child: ListenableBuilder(
-          listenable: controller,
-          builder: (context, _) => SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1100),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: p.surface,
-                    border: Border.all(color: p.line),
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: const [
-                      BoxShadow(
-                          color: Color(0x14222222),
-                          offset: Offset(0, 8),
-                          blurRadius: 24),
-                    ],
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _topBar(p),
-                      Divider(height: 1, color: p.line),
-                      LayoutBuilder(builder: (context, constraints) {
-                        final wide = constraints.maxWidth > 860;
-                        final stage = _stage(p);
-                        final settings = Container(
-                          color: p.surface2,
-                          padding: const EdgeInsets.fromLTRB(20, 22, 20, 28),
-                          child: SettingsPanel(controller: controller),
-                        );
-                        if (wide) {
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: stage),
-                              SizedBox(width: 300, child: settings),
-                            ],
-                          );
-                        }
-                        return Column(children: [stage, settings]);
-                      }),
-                    ],
-                  ),
+        child: Stack(
+          key: _rootKey,
+          children: [
+            NotificationListener<ScrollNotification>(
+              onNotification: (_) {
+                _scrollTick.value++;
+                return false;
+              },
+              child: _mainContent(p),
+            ),
+            Positioned.fill(
+              child: ListenableBuilder(
+                listenable: Listenable.merge([controller, tutorial]),
+                builder: (context, _) => _resultPopVisible
+                    ? ResultPop(
+                        tier: _resultTier,
+                        pitchCorrect: controller.roundPitchCorrect,
+                        onTime: controller.roundOnTime,
+                        pitchTotal: controller.roundPitchTotal,
+                        streak: controller.streak,
+                        onDismiss: _dismissPop,
+                        onNext: () {
+                          _dismissPop();
+                          controller.playRound();
+                        },
+                        onReplay: () {
+                          _dismissPop();
+                          controller.replay();
+                        },
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+            Positioned.fill(
+              child: TutorialOverlay(
+                tut: tutorial,
+                rootKey: _rootKey,
+                keyboardKey: _keyboardKey,
+                playKey: _playKey,
+                scoreKey: _scoreKey,
+                settingsKey: _settingsKey,
+                repaint: _scrollTick,
+              ),
+            ),
+            if (_splashVisible)
+              Positioned.fill(
+                child: SplashScreen(
+                  key: _splashKey,
+                  onDismiss: () {
+                    setState(() => _splashVisible = false);
+                    // The dismiss gesture doubles as the browser audio unlock.
+                    controller.engine.unlock();
+                    tutorial.startTour();
+                  },
                 ),
+              ),
+          ],
+        ),
+        ),
+      ),
+    );
+  }
+
+  Widget _mainContent(Palette p) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1120),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [p.skyTop, p.skyMid, p.skyBottom],
+                  stops: const [0, 0.45, 1],
+                ),
+                borderRadius: BorderRadius.circular(26),
+                boxShadow: [
+                  BoxShadow(
+                      color: p.cardShadow,
+                      offset: const Offset(0, 14),
+                      blurRadius: 40),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _topBar(p),
+                  LayoutBuilder(builder: (context, constraints) {
+                    final wide = constraints.maxWidth > 860;
+                    final stage = _stage(p);
+                    final settings = KeyedSubtree(
+                      key: _settingsKey,
+                      child: Container(
+                        margin: wide
+                            ? const EdgeInsets.fromLTRB(0, 6, 22, 26)
+                            : const EdgeInsets.fromLTRB(24, 0, 24, 26),
+                        decoration: BoxDecoration(
+                          color: p.panel,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                                color: p.cardShadow,
+                                offset: const Offset(0, 6)),
+                          ],
+                        ),
+                        padding: const EdgeInsets.fromLTRB(18, 20, 18, 24),
+                        child: SettingsPanel(controller: controller),
+                      ),
+                    );
+                    if (wide) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: stage),
+                          SizedBox(width: 306, child: settings),
+                        ],
+                      );
+                    }
+                    return Column(children: [stage, settings]);
+                  }),
+                ],
               ),
             ),
           ),
@@ -114,29 +258,77 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  Widget _pill(Palette p, Widget child,
+      {EdgeInsets padding =
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 6)}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: p.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(color: p.cardShadow, offset: const Offset(0, 3)),
+        ],
+      ),
+      padding: padding,
+      child: child,
+    );
+  }
+
   Widget _topBar(Palette p) {
     final c = controller;
     String pct(int num, int den) =>
         den == 0 ? '—' : '${(100 * num / den).round()}%';
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(26, 18, 26, 12),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 14,
+        runSpacing: 10,
         children: [
-          Text('Ear Trainer',
-              style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Georgia',
-                  color: p.ink)),
-          Text('  ♪', style: TextStyle(fontSize: 17, color: p.accent)),
-          const SizedBox(width: 22),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 9),
+              child: CustomPaint(
+                  size: const Size(46, 35), painter: LarkPainter()),
+            ),
+            Text('Skylark',
+                style: TextStyle(
+                    fontSize: 23,
+                    fontWeight: FontWeight.w700,
+                    color: p.ink,
+                    shadows: const [
+                      Shadow(color: Color(0xAAFFFFFF), offset: Offset(0, 2))
+                    ])),
+          ]),
           _modeToggle(p),
-          const Spacer(),
+          Tooltip(
+            message: 'Replay the tutorial',
+            child: InkWell(
+              onTap: tutorial.restart,
+              borderRadius: BorderRadius.circular(999),
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: p.surface.withValues(alpha: 0.72),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(color: p.cardShadow, offset: const Offset(0, 3)),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Text('?',
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: p.muted)),
+              ),
+            ),
+          ),
           if (!c.freePlay) ...[
-            _stat(p, 'Round', '${c.roundNumber}'),
             _stat(p, 'Pitch', pct(c.totalPitchCorrect, c.totalPitchEvents)),
             _stat(p, 'Timing', pct(c.totalOnTime, c.totalPitchEvents)),
-            _stat(p, 'Streak', '${c.streak}'),
+            _stat(p, '⭐ Streak', '${c.streak}'),
           ],
         ],
       ),
@@ -147,43 +339,49 @@ class _GameScreenState extends State<GameScreen> {
     final c = controller;
     Widget chip(String label, bool selected, VoidCallback onTap) => InkWell(
           onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
             decoration: BoxDecoration(
-              color: selected ? p.accentSoft : p.surface,
+              color: selected ? p.accent : Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: selected
+                  ? [BoxShadow(color: p.accentShadow, offset: const Offset(0, 2))]
+                  : null,
             ),
             child: Text(label,
                 style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                    color: selected ? p.accent : p.muted)),
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? p.onAccent : p.muted)),
           ),
         );
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: p.line),
-        borderRadius: BorderRadius.circular(8),
+        color: p.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(color: p.cardShadow, offset: const Offset(0, 3)),
+        ],
       ),
-      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.all(4),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         chip('Training', !c.freePlay, () => c.setFreePlay(false)),
-        Container(width: 1, height: 30, color: p.line),
         chip('Free play', c.freePlay, () => c.setFreePlay(true)),
       ]),
     );
   }
 
   Widget _stat(Palette p, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 22),
-      child: Row(children: [
-        Text('$label ', style: TextStyle(fontSize: 13, color: p.muted)),
+    return _pill(
+      p,
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        Text('$label ',
+            style: TextStyle(
+                fontSize: 12.5, fontWeight: FontWeight.w700, color: p.muted)),
         Text(value,
             style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'monospace',
-                color: p.ink)),
+                fontSize: 12.5, fontWeight: FontWeight.w700, color: p.ink)),
       ]),
     );
   }
@@ -201,55 +399,60 @@ class _GameScreenState extends State<GameScreen> {
           ]
         : c.judged;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 22, 24, 28),
+      padding: const EdgeInsets.fromLTRB(26, 6, 24, 30),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _statusStrip(p),
-          const SizedBox(height: 16),
           _transport(p),
           const SizedBox(height: 18),
           Container(
+            key: _scoreKey,
             decoration: BoxDecoration(
               color: p.surface2,
-              border: Border.all(color: p.line),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(color: p.cardShadow, offset: const Offset(0, 8)),
+              ],
             ),
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
-            child: StaffView(
-              judged: display,
-              measures: c.melody?.measures ?? c.settings.measures,
-              playheadBeat: c.playheadBeat,
-              secondsPerBeat: c.secondsPerBeat,
-              neutralInk: c.freePlay,
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _scoreHeader(p),
+                _DottedDivider(color: p.line),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
+                  child: StaffView(
+                    judged: display,
+                    measures: c.melody?.measures ?? c.settings.measures,
+                    playheadBeat: c.playheadBeat,
+                    secondsPerBeat: c.secondsPerBeat,
+                    neutralInk: c.freePlay,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          if (!c.freePlay) _legend(p),
-          if (!c.freePlay) const SizedBox(height: 18) else const SizedBox(height: 10),
-          KeyboardView(controller: c),
           const SizedBox(height: 10),
-          Text(
-            'Play with the mouse or your computer keyboard — the letter on each key is its shortcut '
-            '(A S D F G H J for naturals, W E T Y U for sharps). Held keys sustain. '
-            'Greyed keys are outside the selected note set.',
-            style: TextStyle(fontSize: 12, color: p.muted),
-          ),
+          // The verdict legend appears once notes are actually being judged.
+          if (!c.freePlay &&
+              (c.phase == Phase.performing || c.phase == Phase.summary)) ...[
+            _legend(p),
+            const SizedBox(height: 18),
+          ] else
+            const SizedBox(height: 8),
+          KeyedSubtree(key: _keyboardKey, child: KeyboardView(controller: c)),
         ],
       ),
     );
   }
 
-  Widget _statusStrip(Palette p) {
+  /// Status message, sun beat-lamps, and tempo — the notation card's header.
+  Widget _scoreHeader(Palette p) {
     final c = controller;
     final (msg, sub) = _statusText();
-    return Container(
-      decoration: BoxDecoration(
-        color: p.surface2,
-        border: Border.all(color: p.line),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
           Expanded(
@@ -258,8 +461,8 @@ class _GameScreenState extends State<GameScreen> {
               children: [
                 Text(msg,
                     style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 16.5,
+                        fontWeight: FontWeight.w700,
                         color: p.ink)),
                 if (sub != null)
                   Text(sub,
@@ -271,15 +474,14 @@ class _GameScreenState extends State<GameScreen> {
           Row(children: [
             for (var b = 0; b < 4; b++)
               Container(
-                width: 14,
-                height: 14,
+                width: 16,
+                height: 16,
                 margin: const EdgeInsets.only(left: 8),
                 decoration: BoxDecoration(
-                  color: c.activeBeat == b ? p.accent : Colors.transparent,
-                  border: Border.all(
-                      color: c.activeBeat == b ? p.accent : p.line,
-                      width: 2),
-                  borderRadius: BorderRadius.circular(4),
+                  color: c.activeBeat == b
+                      ? p.accent
+                      : const Color(0xFFEAF2FA),
+                  shape: BoxShape.circle,
                   boxShadow: c.activeBeat == b
                       ? [BoxShadow(color: p.accentSoft, spreadRadius: 4)]
                       : null,
@@ -288,7 +490,9 @@ class _GameScreenState extends State<GameScreen> {
             const SizedBox(width: 12),
             Text('♩ = ${c.settings.bpm}',
                 style: TextStyle(
-                    fontSize: 13, fontFamily: 'monospace', color: p.muted)),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: p.muted)),
           ]),
         ],
       ),
@@ -297,6 +501,9 @@ class _GameScreenState extends State<GameScreen> {
 
   (String, String?) _statusText() {
     final c = controller;
+    if (c.paused) {
+      return ('Paused', 'Everything is frozen in place. Press Resume to continue.');
+    }
     if (c.freePlay) {
       return (
         'Free play',
@@ -318,7 +525,7 @@ class _GameScreenState extends State<GameScreen> {
         final m =
             ((c.playheadBeat ?? 0) / 4).floor().clamp(0, measures - 1) + 1;
         return ('Listen — measure $m of $measures',
-            'The staff stays blank: pure dictation.');
+            'Ears only! The staff stays blank on purpose.');
       case Phase.userCount:
         return ('Get ready…', 'Your turn after the count. Play in time.');
       case Phase.performing:
@@ -326,12 +533,12 @@ class _GameScreenState extends State<GameScreen> {
         final m = (beat / 4).floor().clamp(0, measures - 1) + 1;
         final b = (beat % 4).floor() + 1;
         return ('Your turn — measure $m, beat $b',
-            'Stay with the metronome. Sit out the rests.');
+            'Stay with the beat — you’ve got this!');
       case Phase.summary:
         return (
           'Round ${c.roundNumber}: ${c.roundPitchCorrect}/${c.roundPitchTotal} pitches · ${c.roundOnTime}/${c.roundPitchTotal} on time',
           c.streak > 0
-              ? 'Perfect round — streak ${c.streak}. Replay to study, or press Next round.'
+              ? 'Perfect round — streak ${c.streak}! Replay to study, or press Next round.'
               : 'Replay to study the melody, or press Next round.'
         );
     }
@@ -341,7 +548,7 @@ class _GameScreenState extends State<GameScreen> {
     final c = controller;
     if (c.freePlay) {
       return Wrap(
-        spacing: 10,
+        spacing: 12,
         runSpacing: 10,
         children: [
           _button(
@@ -352,24 +559,28 @@ class _GameScreenState extends State<GameScreen> {
           ),
           _button(p, '⌫  Clear staff',
               onTap: c.echo.isEmpty ? null : c.clearEcho),
-          _button(p, '♩  Hear tonic (C4)', tonic: true, onTap: c.hearTonic),
         ],
       );
     }
     final active = c.phase.isActiveRound;
     return Wrap(
-      spacing: 10,
+      spacing: 12,
       runSpacing: 10,
       children: [
-        _button(
-          p,
-          c.phase == Phase.summary ? '▶  Next round' : '▶  Play round',
-          primary: true,
-          onTap: active ? null : c.playRound,
+        KeyedSubtree(
+          key: _playKey,
+          child: _button(
+            p,
+            c.phase == Phase.summary ? '▶  Next round' : '▶  Play round',
+            primary: !c.paused,
+            onTap: active ? null : c.playRound,
+          ),
         ),
-        _button(p, '↻  Replay melody',
-            onTap: c.melody == null ? null : c.replay),
-        _button(p, '♩  Hear tonic (C4)', tonic: true, onTap: c.hearTonic),
+        if (active)
+          _button(p, c.paused ? '▶  Resume' : '❚❚  Pause',
+              blue: !c.paused, primary: c.paused, onTap: c.togglePause),
+        if (c.melody != null && !active)
+          _button(p, '↻  Replay melody', onTap: c.replay),
         if (active) _button(p, 'Skip round', ghost: true, onTap: c.skip),
       ],
     );
@@ -377,40 +588,42 @@ class _GameScreenState extends State<GameScreen> {
 
   Widget _button(Palette p, String label,
       {bool primary = false,
-      bool tonic = false,
+      bool blue = false,
       bool ghost = false,
       VoidCallback? onTap}) {
     final enabled = onTap != null;
     Color bg = p.surface;
-    Color fg = ghost ? p.muted : p.ink;
-    Color edge = p.line;
+    Color fg = p.muted;
+    Color shadow = p.btnShadow;
     if (primary) {
       bg = p.accent;
       fg = p.onAccent;
-      edge = p.accent;
-    } else if (tonic) {
+      shadow = p.accentShadow;
+    } else if (blue) {
       bg = p.tonicSoft;
       fg = p.tonic;
-      edge = p.tonic;
+      shadow = p.blueShadow;
+    } else if (ghost) {
+      bg = p.surface.withValues(alpha: 0.6);
     }
     return Opacity(
       opacity: enabled ? 1 : 0.45,
       child: Material(
-        color: bg,
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(999),
           onTap: onTap,
           child: Container(
             decoration: BoxDecoration(
-              border: Border.all(color: edge),
-              borderRadius: BorderRadius.circular(8),
+              color: bg,
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: [BoxShadow(color: shadow, offset: const Offset(0, 4))],
             ),
             padding:
-                const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
             child: Text(label,
                 style: TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600, color: fg)),
+                    fontSize: 14.5, fontWeight: FontWeight.w700, color: fg)),
           ),
         ),
       ),
@@ -422,23 +635,56 @@ class _GameScreenState extends State<GameScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-                width: 10,
-                height: 10,
+                width: 12,
+                height: 12,
                 decoration:
                     BoxDecoration(color: c, shape: BoxShape.circle)),
             const SizedBox(width: 6),
-            Text(text, style: TextStyle(fontSize: 12, color: p.muted)),
+            Text(text,
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: p.muted)),
           ],
         );
     return Wrap(
       spacing: 18,
       runSpacing: 6,
       children: [
-        item(p.good, 'Right pitch, on the beat'),
-        item(p.warn, 'Right pitch, off the beat'),
-        item(p.bad, 'Wrong pitch or missed'),
-        item(p.muted, 'Rest — wait it out'),
+        item(p.good, 'Right & on the beat'),
+        item(p.warn, 'Right, off the beat'),
+        item(p.bad, 'Wrong or missed'),
+        item(const Color(0xFFB9C7DC), 'Rest — float through it'),
       ],
     );
   }
+}
+
+class _DottedDivider extends StatelessWidget {
+  final Color color;
+  const _DottedDivider({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 3,
+      child: CustomPaint(painter: _DotsPainter(color), size: Size.infinite),
+    );
+  }
+}
+
+class _DotsPainter extends CustomPainter {
+  final Color color;
+  _DotsPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    for (var x = 12.0; x < size.width - 6; x += 9) {
+      canvas.drawCircle(Offset(x, size.height / 2), 1.6, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DotsPainter old) => old.color != color;
 }

@@ -1,5 +1,5 @@
 name: ear_trainer
-description: "Ear Trainer — melodic and rhythmic dictation game for the browser."
+description: "Skylark — melodic and rhythmic dictation game for the browser."
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -18,3 +18,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: ComicNeue
+      fonts:
+        - asset: assets/fonts/ComicNeue-Regular.ttf
+        - asset: assets/fonts/ComicNeue-Bold.ttf
+          weight: 700

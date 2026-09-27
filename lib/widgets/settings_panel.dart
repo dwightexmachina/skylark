@@ -7,15 +7,22 @@ import '../models/settings.dart';
 import '../state/game_controller.dart';
 import '../ui/palette.dart';
 
-class SettingsPanel extends StatelessWidget {
+class SettingsPanel extends StatefulWidget {
   final GameController controller;
 
   const SettingsPanel({super.key, required this.controller});
 
   @override
+  State<SettingsPanel> createState() => _SettingsPanelState();
+}
+
+class _SettingsPanelState extends State<SettingsPanel> {
+  bool _moreOpen = false;
+
+  @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    final c = controller;
+    final c = widget.controller;
     final s = c.settings;
     final locked = c.phase.isActiveRound;
 
@@ -26,13 +33,13 @@ class SettingsPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('SETTINGS',
+            Text('⚙ Settings',
                 style: TextStyle(
-                    fontSize: 11,
-                    letterSpacing: 1.6,
-                    fontWeight: FontWeight.w600,
-                    color: p.muted)),
-            const SizedBox(height: 20),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: p.ink)),
+            const SizedBox(height: 18),
             _head(p, 'Difficulty'),
             const SizedBox(height: 8),
             _segmented<Difficulty>(
@@ -52,47 +59,39 @@ class SettingsPanel extends StatelessWidget {
                 p,
                 switch (s.difficulty) {
                   Difficulty.beginner =>
-                    'Quarter notes only, no rests — pitch dictation on a steady pulse.',
-                  Difficulty.easy => 'Quarters and halves, no rests.',
+                    'Quarter notes only, no rests, loose timing — pitch dictation on a steady pulse.',
+                  Difficulty.easy =>
+                    'Quarters and halves, no rests. Standard timing.',
                   Difficulty.standard =>
-                    'Quarters, halves, eighth pairs, and rests.',
+                    'Quarters, halves, eighth pairs, and rests. Standard timing.',
                   Difficulty.hard =>
-                    'Full vocabulary, with more eighths and rests.',
-                  Difficulty.custom => 'Custom — rhythm edited below.',
+                    'Full vocabulary, more eighths and rests. Tight timing.',
+                  Difficulty.custom => 'Custom — tweaked under More settings.',
                 }),
-            const SizedBox(height: 22),
-            _head(p, 'Rhythm vocabulary'),
-            const SizedBox(height: 4),
-            _check(p, c, 'Half notes', s.allowHalves,
-                (v) => s.copyWith(allowHalves: v, difficulty: Difficulty.custom)),
-            _check(p, c, 'Eighth-note pairs', s.allowEighths,
-                (v) => s.copyWith(allowEighths: v, difficulty: Difficulty.custom)),
-            _check(p, c, 'Rests', s.allowRests,
-                (v) => s.copyWith(allowRests: v, difficulty: Difficulty.custom)),
-            _sub(p, 'Quarter notes are always in play.'),
-            const SizedBox(height: 22),
+            const SizedBox(height: 20),
             _head(p, 'Notes in play'),
             const SizedBox(height: 8),
             _noteChips(p, c),
             const SizedBox(height: 6),
             _sub(p,
                 '${s.noteSet.length} of 12 selected. At least 2 required.'),
-            const SizedBox(height: 22),
+            const SizedBox(height: 20),
             _head(p, 'Length'),
             const SizedBox(height: 8),
             _stepper(p, c),
             const SizedBox(height: 6),
-            _sub(p,
-                'Measures per round (1–4), in 4/4. Rhythms use quarters, halves, paired eighths, and quarter rests.'),
-            const SizedBox(height: 22),
+            _sub(p, 'Measures per round (1–4), in 4/4.'),
+            const SizedBox(height: 20),
             _head(p, 'Tempo'),
             SliderTheme(
               data: SliderThemeData(
-                activeTrackColor: p.accent,
-                inactiveTrackColor: p.line,
+                activeTrackColor: p.tonicSoft,
+                inactiveTrackColor: const Color(0xFFEAF2FA),
                 thumbColor: p.accent,
-                overlayColor: p.accent.withValues(alpha: 0.12),
-                trackHeight: 4,
+                overlayColor: p.accentSoft.withValues(alpha: 0.5),
+                trackHeight: 8,
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 11),
               ),
               child: Slider(
                 value: s.bpm.toDouble(),
@@ -103,47 +102,108 @@ class SettingsPanel extends StatelessWidget {
                     c.updateSettings(s.copyWith(bpm: v.round())),
               ),
             ),
-            _sub(p, '♩ = ${s.bpm} BPM'),
-            const SizedBox(height: 22),
-            _head(p, 'Timing window'),
-            const SizedBox(height: 8),
-            _segmented<TimingWindow>(
-              p,
-              values: TimingWindow.values,
-              selected: s.window,
-              label: (w) => w.label,
-              onTap: (w) => c.updateSettings(s.copyWith(window: w)),
-            ),
-            const SizedBox(height: 6),
-            _sub(p, 'How far off the beat a click may land: ±½ · ±¼ · ±⅛ beat.'),
-            const SizedBox(height: 22),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _head(p, 'Play tonic first'),
-                Switch(
-                  value: s.tonicFirst,
-                  activeThumbColor: p.surface,
-                  activeTrackColor: p.accent,
-                  inactiveTrackColor: p.line,
-                  onChanged: (v) =>
-                      c.updateSettings(s.copyWith(tonicFirst: v)),
+            _sub(p, '♩ = ${s.bpm} BPM (40–140)'),
+            const SizedBox(height: 20),
+            // ------------------------------------------------ More settings
+            InkWell(
+              onTap: () => setState(() => _moreOpen = !_moreOpen),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  color: p.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(color: p.btnShadow, offset: const Offset(0, 3)),
+                  ],
                 ),
-              ],
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('More settings',
+                        style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: p.staffInk)),
+                    Text(_moreOpen ? '▾' : '▸',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: p.tonicSoft)),
+                  ],
+                ),
+              ),
             ),
-            _sub(p, 'Each round opens with C4 as a reference before the count-in.'),
-            const SizedBox(height: 22),
-            _head(p, 'Tone'),
-            const SizedBox(height: 8),
-            _segmented<Tone>(
-              p,
-              values: Tone.values,
-              selected: s.tone,
-              label: (t) => t.label,
-              onTap: (t) => c.updateSettings(s.copyWith(tone: t)),
-            ),
-            const SizedBox(height: 6),
-            _sub(p, 'Pure = sine · Warm = triangle · Organ = layered harmonics.'),
+            if (!_moreOpen) ...[
+              const SizedBox(height: 6),
+              _sub(p,
+                  'Rhythm vocabulary · Timing window · Play tonic first · Tone'),
+            ] else ...[
+              const SizedBox(height: 18),
+              _head(p, 'Rhythm vocabulary'),
+              const SizedBox(height: 6),
+              _check(p, c, 'Half notes', s.allowHalves,
+                  (v) => s.copyWith(
+                      allowHalves: v, difficulty: Difficulty.custom)),
+              _check(p, c, 'Eighth-note pairs', s.allowEighths,
+                  (v) => s.copyWith(
+                      allowEighths: v, difficulty: Difficulty.custom)),
+              _check(p, c, 'Rests', s.allowRests,
+                  (v) => s.copyWith(
+                      allowRests: v, difficulty: Difficulty.custom)),
+              _sub(p, 'Quarter notes are always in play.'),
+              const SizedBox(height: 18),
+              _head(p, 'Timing window'),
+              const SizedBox(height: 8),
+              _segmented<TimingWindow>(
+                p,
+                values: TimingWindow.values,
+                selected: s.window,
+                label: (w) => w.label,
+                onTap: (w) => c.updateSettings(
+                    s.copyWith(window: w, difficulty: Difficulty.custom)),
+              ),
+              const SizedBox(height: 6),
+              _sub(p,
+                  'How far off the beat a note may land: ±½ · ±¼ · ±⅛ beat.'),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _head(p, 'Play tonic first'),
+                  Switch(
+                    value: s.tonicFirst,
+                    activeThumbColor: p.accent,
+                    activeTrackColor: p.tonicSoft,
+                    inactiveThumbColor: p.surface,
+                    inactiveTrackColor: const Color(0xFFEAF2FA),
+                    thumbIcon: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.selected)
+                          ? Icon(Icons.wb_sunny, size: 14, color: p.onAccent)
+                          : null,
+                    ),
+                    onChanged: (v) =>
+                        c.updateSettings(s.copyWith(tonicFirst: v)),
+                  ),
+                ],
+              ),
+              _sub(p,
+                  'Each round opens with C4 as a reference before the count-in.'),
+              const SizedBox(height: 18),
+              _head(p, 'Tone'),
+              const SizedBox(height: 8),
+              _segmented<Tone>(
+                p,
+                values: Tone.values,
+                selected: s.tone,
+                label: (t) => t.label,
+                onTap: (t) => c.updateSettings(s.copyWith(tone: t)),
+              ),
+              const SizedBox(height: 6),
+              _sub(p,
+                  'Pure = sine · Warm = triangle · Organ = layered harmonics.'),
+            ],
           ],
         ),
       ),
@@ -152,46 +212,51 @@ class SettingsPanel extends StatelessWidget {
 
   Widget _head(Palette p, String text) => Text(text,
       style: TextStyle(
-          fontSize: 14, fontWeight: FontWeight.w600, color: p.ink));
+          fontSize: 14.5, fontWeight: FontWeight.w700, color: p.ink));
+
+  Widget _sub(Palette p, String text) =>
+      Text(text, style: TextStyle(fontSize: 12, color: p.muted));
 
   Widget _check(Palette p, GameController c, String label, bool value,
       Settings Function(bool) update) {
     return InkWell(
       onTap: () => c.updateSettings(update(!value)),
+      borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(children: [
           Container(
-            width: 16,
-            height: 16,
+            width: 19,
+            height: 19,
             decoration: BoxDecoration(
-              color: value ? p.accent : p.surface,
-              border: Border.all(color: value ? p.accent : p.line, width: 1.5),
-              borderRadius: BorderRadius.circular(4),
+              color: value ? p.good : p.surface,
+              border: Border.all(
+                  color: value ? p.good : p.keyWhiteEdge, width: 2.5),
+              borderRadius: BorderRadius.circular(7),
             ),
             child: value
-                ? Icon(Icons.check, size: 12, color: p.surface)
+                ? const Icon(Icons.check, size: 12, color: Colors.white)
                 : null,
           ),
           const SizedBox(width: 8),
-          Text(label, style: TextStyle(fontSize: 13, color: p.ink)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: p.staffInk)),
         ]),
       ),
     );
   }
 
-  Widget _sub(Palette p, String text) =>
-      Text(text, style: TextStyle(fontSize: 12, color: p.muted));
-
   Widget _noteChips(Palette p, GameController c) {
     return LayoutBuilder(builder: (context, constraints) {
-      final chipW = (constraints.maxWidth - 5 * 6) / 6;
+      final chipW = (constraints.maxWidth - 5 * 7) / 6;
       return Wrap(
-        spacing: 6,
-        runSpacing: 6,
+        spacing: 7,
+        runSpacing: 7,
         children: [
-          for (var s = 0; s < 12; s++)
-            _chip(p, c, s, chipW),
+          for (var s = 0; s < 12; s++) _chip(p, c, s, chipW),
         ],
       );
     });
@@ -200,24 +265,27 @@ class SettingsPanel extends StatelessWidget {
   Widget _chip(Palette p, GameController c, int semitone, double width) {
     final on = c.settings.noteSet.contains(semitone);
     return InkWell(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(12),
       onTap: () => c.toggleNote(semitone),
       child: Container(
         width: width,
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 7),
         decoration: BoxDecoration(
-          color: on ? p.accentSoft : p.surface,
-          border: Border.all(color: on ? p.accent : p.line),
-          borderRadius: BorderRadius.circular(6),
+          color: on ? p.accent : p.surface,
+          border: Border.all(
+              color: on ? p.accentShadow : p.line, width: 2),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: on
+              ? [BoxShadow(color: p.accentShadow, offset: const Offset(0, 2))]
+              : null,
         ),
         alignment: Alignment.center,
         child: Text(
           pitchClassLabels[semitone],
           style: TextStyle(
-            fontSize: 12,
-            fontFamily: 'monospace',
-            fontWeight: on ? FontWeight.w700 : FontWeight.w400,
-            color: on ? p.accent : p.muted,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: on ? p.onAccent : p.keyBlackDisabled,
           ),
         ),
       ),
@@ -229,9 +297,12 @@ class SettingsPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: p.surface,
-        border: Border.all(color: p.line),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(color: p.btnShadow, offset: const Offset(0, 3)),
+        ],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -239,11 +310,7 @@ class SettingsPanel extends StatelessWidget {
               () => c.updateSettings(s.copyWith(measures: s.measures - 1))),
           Container(
             width: 44,
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            decoration: BoxDecoration(
-              border: Border.symmetric(
-                  vertical: BorderSide(color: p.line)),
-            ),
+            padding: const EdgeInsets.symmetric(vertical: 7),
             alignment: Alignment.center,
             child: Text('${s.measures}',
                 style: TextStyle(
@@ -260,12 +327,14 @@ class SettingsPanel extends StatelessWidget {
     return InkWell(
       onTap: enabled ? onTap : null,
       child: Container(
-        width: 38,
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        width: 40,
+        padding: const EdgeInsets.symmetric(vertical: 7),
         alignment: Alignment.center,
         child: Text(label,
             style: TextStyle(
-                fontSize: 16, color: enabled ? p.accent : p.line)),
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: enabled ? p.tonicSoft : p.line)),
       ),
     );
   }
@@ -279,34 +348,37 @@ class SettingsPanel extends StatelessWidget {
   }) {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: p.line),
-        borderRadius: BorderRadius.circular(8),
+        color: const Color(0xFFEAF2FA),
+        borderRadius: BorderRadius.circular(999),
       ),
-      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.all(4),
       child: Row(
         children: [
-          for (var i = 0; i < values.length; i++)
+          for (final v in values)
             Expanded(
               child: InkWell(
-                onTap: () => onTap(values[i]),
+                borderRadius: BorderRadius.circular(999),
+                onTap: () => onTap(v),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   decoration: BoxDecoration(
-                    color: values[i] == selected ? p.accentSoft : p.surface,
-                    border: i > 0
-                        ? Border(left: BorderSide(color: p.line))
+                    color: v == selected ? p.accent : Colors.transparent,
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: v == selected
+                        ? [
+                            BoxShadow(
+                                color: p.accentShadow,
+                                offset: const Offset(0, 2))
+                          ]
                         : null,
                   ),
                   alignment: Alignment.center,
                   child: Text(
-                    label(values[i]),
+                    label(v),
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight: values[i] == selected
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                      color:
-                          values[i] == selected ? p.accent : p.muted,
+                      fontWeight: FontWeight.w700,
+                      color: v == selected ? p.onAccent : p.muted,
                     ),
                   ),
                 ),

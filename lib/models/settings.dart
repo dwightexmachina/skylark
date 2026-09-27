@@ -37,16 +37,17 @@ class Settings {
   final bool allowRests;
 
   const Settings({
-    this.noteSet = const {0, 2, 4, 7, 9}, // major pentatonic
-    this.measures = 2,
+    this.noteSet = const {0, 4, 7}, // C major triad
+    this.measures = 1,
     this.bpm = 80,
-    this.window = TimingWindow.standard,
+    this.window = TimingWindow.loose, // matches the Beginner default
+
     this.tonicFirst = true,
     this.tone = Tone.warm,
-    this.difficulty = Difficulty.standard,
-    this.allowHalves = true,
-    this.allowEighths = true,
-    this.allowRests = true,
+    this.difficulty = Difficulty.beginner,
+    this.allowHalves = false,
+    this.allowEighths = false,
+    this.allowRests = false,
   });
 
   Settings copyWith({
@@ -75,23 +76,32 @@ class Settings {
     );
   }
 
-  /// Apply a preset: sets the rhythm vocabulary in one click.
+  /// Apply a preset: sets the rhythm vocabulary and timing window in one click.
   Settings withDifficulty(Difficulty d) => switch (d) {
         Difficulty.beginner => copyWith(
             difficulty: d,
             allowHalves: false,
             allowEighths: false,
-            allowRests: false),
+            allowRests: false,
+            window: TimingWindow.loose),
         Difficulty.easy => copyWith(
             difficulty: d,
             allowHalves: true,
             allowEighths: false,
-            allowRests: false),
-        Difficulty.standard || Difficulty.hard => copyWith(
+            allowRests: false,
+            window: TimingWindow.standard),
+        Difficulty.standard => copyWith(
             difficulty: d,
             allowHalves: true,
             allowEighths: true,
-            allowRests: true),
+            allowRests: true,
+            window: TimingWindow.standard),
+        Difficulty.hard => copyWith(
+            difficulty: d,
+            allowHalves: true,
+            allowEighths: true,
+            allowRests: true,
+            window: TimingWindow.tight),
         Difficulty.custom => copyWith(difficulty: d),
       };
 }

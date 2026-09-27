@@ -41,8 +41,23 @@ class AudioEngine {
 
   double get now => _ctx.currentTime;
 
+  bool _paused = false;
+
+  /// Suspend the context: freezes [now] and everything scheduled, in place.
+  void pause() {
+    _paused = true;
+    _ctx.suspend();
+  }
+
+  /// Resume from exactly where [pause] left off.
+  void unpause() {
+    _paused = false;
+    _ctx.resume();
+  }
+
   /// Browsers require a user gesture before audio may start.
   void unlock() {
+    if (_paused) return; // an explicit pause is not the autoplay lock
     if (_ctx.state == 'suspended') _ctx.resume();
   }
 

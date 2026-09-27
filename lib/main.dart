@@ -11,19 +11,14 @@ class EarTrainerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ear Trainer',
+      title: 'Skylark',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.light,
-        scaffoldBackgroundColor: Palette.light.bg,
+        scaffoldBackgroundColor: Palette.cloud.bg,
+        fontFamily: 'ComicNeue',
         useMaterial3: true,
       ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Palette.dark.bg,
-        useMaterial3: true,
-      ),
-      themeMode: ThemeMode.system,
       home: const GameScreen(),
     );
   }
