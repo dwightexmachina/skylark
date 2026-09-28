@@ -182,7 +182,7 @@ class TutorialController extends ChangeNotifier {
   void restart() {
     _resumeGame();
     if (game.phase.isActiveRound) game.skip();
-    if (game.freePlay) game.setFreePlay(false);
+    if (game.mode != GameMode.training) game.setMode(GameMode.training);
     stage = TutStage.welcome;
     notifyListeners();
   }

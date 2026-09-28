@@ -57,31 +57,65 @@ class _SettingsPanelState extends State<SettingsPanel> {
             const SizedBox(height: 6),
             _sub(
                 p,
-                switch (s.difficulty) {
-                  Difficulty.beginner =>
-                    'Quarter notes only, no rests, loose timing — pitch dictation on a steady pulse.',
-                  Difficulty.easy =>
-                    'Quarters and halves, no rests. Standard timing.',
-                  Difficulty.standard =>
-                    'Quarters, halves, eighth pairs, and rests. Standard timing.',
-                  Difficulty.hard =>
-                    'Full vocabulary, more eighths and rests. Tight timing.',
-                  Difficulty.custom => 'Custom — tweaked under More settings.',
-                }),
+                c.perfectPitch
+                    ? switch (s.difficulty) {
+                        Difficulty.beginner =>
+                          'Replay the mystery note as often as you like.',
+                        Difficulty.easy => 'Two replays per mystery note.',
+                        Difficulty.standard ||
+                        Difficulty.custom =>
+                          'One replay per mystery note.',
+                        Difficulty.hard => 'One listen only — no replays.',
+                      }
+                    : switch (s.difficulty) {
+                        Difficulty.beginner =>
+                          'Quarter notes only, no rests, loose timing — pitch dictation on a steady pulse.',
+                        Difficulty.easy =>
+                          'Quarters and halves, no rests. Standard timing.',
+                        Difficulty.standard =>
+                          'Quarters, halves, eighth pairs, and rests. Standard timing.',
+                        Difficulty.hard =>
+                          'Full vocabulary, more eighths and rests. Tight timing.',
+                        Difficulty.custom =>
+                          'Custom — tweaked under More settings.',
+                      }),
             const SizedBox(height: 20),
             _head(p, 'Notes in play'),
             const SizedBox(height: 8),
             _noteChips(p, c),
             const SizedBox(height: 6),
-            _sub(p,
-                '${s.noteSet.length} of 12 selected. At least 2 required.'),
+            _sub(
+                p,
+                c.perfectPitch
+                    ? '${s.noteSet.length} of 12 selected — the real difficulty dial. At least 2 required.'
+                    : '${s.noteSet.length} of 12 selected. At least 2 required.'),
             const SizedBox(height: 20),
-            _head(p, 'Length'),
+            _head(p, c.perfectPitch ? 'Notes per round' : 'Length'),
             const SizedBox(height: 8),
             _stepper(p, c),
             const SizedBox(height: 6),
-            _sub(p, 'Measures per round (1–4), in 4/4.'),
+            _sub(
+                p,
+                c.perfectPitch
+                    ? 'Mystery notes per round (1–10).'
+                    : 'Measures per round (1–4), in 4/4.'),
             const SizedBox(height: 20),
+            if (c.perfectPitch)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: p.line, width: 2),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  'Tempo is hidden here — Perfect Pitch has no pulse. '
+                  'Tonic-first is off by design: no reference note allowed.',
+                  style: TextStyle(
+                      fontSize: 11.5, height: 1.4, color: p.muted),
+                ),
+              )
+            else ...[
             _head(p, 'Tempo'),
             SliderTheme(
               data: SliderThemeData(
@@ -103,6 +137,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
               ),
             ),
             _sub(p, '♩ = ${s.bpm} BPM (40–140)'),
+            ],
             const SizedBox(height: 20),
             // ------------------------------------------------ More settings
             InkWell(
@@ -137,8 +172,25 @@ class _SettingsPanelState extends State<SettingsPanel> {
             ),
             if (!_moreOpen) ...[
               const SizedBox(height: 6),
+              _sub(
+                  p,
+                  c.perfectPitch
+                      ? 'Tone — practice across timbres'
+                      : 'Rhythm vocabulary · Timing window · Play tonic first · Tone'),
+            ] else if (c.perfectPitch) ...[
+              const SizedBox(height: 18),
+              _head(p, 'Tone'),
+              const SizedBox(height: 8),
+              _segmented<Tone>(
+                p,
+                values: Tone.values,
+                selected: s.tone,
+                label: (t) => t.label,
+                onTap: (t) => c.updateSettings(s.copyWith(tone: t)),
+              ),
+              const SizedBox(height: 6),
               _sub(p,
-                  'Rhythm vocabulary · Timing window · Play tonic first · Tone'),
+                  'Pure = sine · Warm = triangle · Organ = layered harmonics. Recognizing pitch across timbres is the real test.'),
             ] else ...[
               const SizedBox(height: 18),
               _head(p, 'Rhythm vocabulary'),
@@ -296,6 +348,11 @@ class _SettingsPanelState extends State<SettingsPanel> {
 
   Widget _stepper(Palette p, GameController c) {
     final s = c.settings;
+    final pp = c.perfectPitch;
+    final value = pp ? s.ppNotes : s.measures;
+    final min = 1, max = pp ? 10 : 4;
+    void set(int v) => c.updateSettings(
+        pp ? s.copyWith(ppNotes: v) : s.copyWith(measures: v));
     return Container(
       decoration: BoxDecoration(
         color: p.surface,
@@ -308,18 +365,16 @@ class _SettingsPanelState extends State<SettingsPanel> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _stepBtn(p, '−', s.measures > 1,
-              () => c.updateSettings(s.copyWith(measures: s.measures - 1))),
+          _stepBtn(p, '−', value > min, () => set(value - 1)),
           Container(
             width: 44,
             padding: const EdgeInsets.symmetric(vertical: 7),
             alignment: Alignment.center,
-            child: Text('${s.measures}',
+            child: Text('$value',
                 style: TextStyle(
                     fontWeight: FontWeight.w700, color: p.ink)),
           ),
-          _stepBtn(p, '+', s.measures < 4,
-              () => c.updateSettings(s.copyWith(measures: s.measures + 1))),
+          _stepBtn(p, '+', value < max, () => set(value + 1)),
         ],
       ),
     );

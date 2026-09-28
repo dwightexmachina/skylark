@@ -27,11 +27,13 @@ class LoggedNote {
 class RoundLogEntry {
   final int number; // 1-based, in the order rounds were completed
   final bool won; // perfect round: every note right and on time
+  final bool perfectPitch; // true when this was a Perfect Pitch round
   final List<LoggedNote> notes;
   final int pitchCorrect, onTime, pitchTotal;
   const RoundLogEntry({
     required this.number,
     required this.won,
+    this.perfectPitch = false,
     required this.notes,
     required this.pitchCorrect,
     required this.onTime,
@@ -40,6 +42,9 @@ class RoundLogEntry {
 }
 
 enum Phase { idle, tonic, countIn, listening, userCount, performing, summary }
+
+/// The three ways to use Skylark.
+enum GameMode { training, perfectPitch, freePlay }
 
 extension PhaseX on Phase {
   bool get isActiveRound =>

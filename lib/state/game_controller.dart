@@ -24,6 +24,7 @@ class GameController extends ChangeNotifier {
   int totalPitchEvents = 0;
   int totalPitchCorrect = 0;
   int totalOnTime = 0;
+  int totalTimedEvents = 0; // training only: Perfect Pitch has no timing
   int streak = 0;
 
   // Last finished round, for the summary line.
@@ -63,18 +64,29 @@ class GameController extends ChangeNotifier {
   /// scheduled notes, and metronome exactly in place.
   bool paused = false;
 
-  // Free play mode.
-  bool freePlay = false;
+  // Mode: training (dictation), perfect pitch, or free play.
+  GameMode mode = GameMode.training;
+  bool get freePlay => mode == GameMode.freePlay;
+  bool get perfectPitch => mode == GameMode.perfectPitch;
   final List<Pitch> echo = []; // notes echoed onto the staff
   bool metronomeOn = false;
   Timer? _metroTimer;
   double _metroStart = 0;
   double _nextClick = 0;
 
+  // Perfect Pitch round state.
+  int ppIndex = 0; // which mystery note is up
+  int ppReplaysLeft = 0; // -1 = unlimited
+  String? ppFeedback; // teaching line after a wrong guess
+  Timer? _ppTimer; // schedules the next mystery note
+  Timer? _flashTimer; // clears key flashes (no ticker in this mode)
+  bool get ppRoundActive => perfectPitch && phase == Phase.performing;
+
   double get _pos => (engine.now - _t0) / _spb;
 
   /// Playhead position in melody beats during the user's turn (or listening).
   double? get playheadBeat {
+    if (perfectPitch) return null; // no pulse, no playhead
     if (phase == Phase.listening) return _pos - _listenStart;
     if (phase == Phase.performing) return _pos - _userStart;
     return null;
@@ -90,18 +102,23 @@ class GameController extends ChangeNotifier {
 
   void playRound() {
     if (freePlay || phase.isActiveRound) return;
-    melody = generateMelody(settings, _rng);
     roundNumber++;
+    if (perfectPitch) {
+      _startPPRound();
+      return;
+    }
+    melody = generateMelody(settings, _rng);
     _startTimeline();
   }
 
   void replay() {
-    if (freePlay || melody == null) return;
+    if (freePlay || perfectPitch || melody == null) return;
     engine.stopAll();
     _startTimeline();
   }
 
   void togglePause() {
+    if (perfectPitch) return; // nothing to freeze: no timeline
     if (!paused && !phase.isActiveRound) return;
     paused = !paused;
     if (paused) {
@@ -123,7 +140,147 @@ class GameController extends ChangeNotifier {
     if (!phase.isActiveRound) return;
     _clearPause();
     lastRoundSkipped = true;
-    _finish();
+    if (perfectPitch) {
+      _finishPP();
+    } else {
+      _finish();
+    }
+  }
+
+  // ------------------------------------------------------------ perfect pitch
+
+  /// One round = [Settings.ppNotes] mystery notes. Each plays with no tonic,
+  /// no count-in and no metronome; the user's first key press is the answer.
+  void _startPPRound() {
+    _clearPause();
+    engine.unlock();
+    _stopMetronome();
+    lastRoundSkipped = false;
+    attempt++;
+    melody = null;
+    final pool = settings.noteSet.toList();
+    judged = [
+      for (var i = 0; i < settings.ppNotes; i++)
+        JudgedEvent(NoteEvent(
+            startBeat: i.toDouble(),
+            durationBeats: 1,
+            pitch: Pitch(pool[_rng.nextInt(pool.length)]))),
+    ];
+    roundPitchTotal = judged.length;
+    ppIndex = 0;
+    ppFeedback = null;
+    ppReplaysLeft = switch (settings.difficulty) {
+      Difficulty.beginner => -1,
+      Difficulty.easy => 2,
+      Difficulty.standard || Difficulty.custom => 1,
+      Difficulty.hard => 0,
+    };
+    phase = Phase.performing;
+    activeBeat = null;
+    flashSemitone = null;
+    _ticker?.cancel();
+    _ticker = null;
+    _playMystery();
+    notifyListeners();
+  }
+
+  void _playMystery() {
+    final target = judged[ppIndex].event.pitch!;
+    engine.scheduleNote(
+        target.frequency, settings.tone, engine.now + 0.15, 0.9);
+  }
+
+  void ppHearAgain() {
+    if (!ppRoundActive || ppReplaysLeft == 0) return;
+    if (ppReplaysLeft > 0) ppReplaysLeft--;
+    _playMystery();
+    notifyListeners();
+  }
+
+  void _ppAnswer(Pitch played) {
+    final j = judged[ppIndex];
+    final target = j.event.pitch!;
+    j.played = played;
+    j.revealed = true;
+    j.verdict = played == target ? Verdict.good : Verdict.wrongPitch;
+    flashSemitone = played.semitone;
+    flashVerdict = j.verdict;
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(milliseconds: 650), () {
+      flashSemitone = null;
+      flashVerdict = null;
+      notifyListeners();
+    });
+    final wrong = j.verdict != Verdict.good;
+    if (wrong) {
+      ppFeedback =
+          'You played ${played.label} — it was ${target.label}. Listen: '
+          '♪ ${played.label} → ♪ ${target.label}';
+      // The guessed note is already sounding from the press; follow with
+      // the real one so the gap between them is audible.
+      engine.scheduleNote(
+          target.frequency, settings.tone, engine.now + 0.8, 0.9);
+    } else {
+      ppFeedback = null;
+    }
+    ppIndex++;
+    if (ppIndex >= judged.length) {
+      _finishPP();
+      return;
+    }
+    _ppTimer?.cancel();
+    _ppTimer = Timer(Duration(milliseconds: wrong ? 2100 : 1100), () {
+      if (!ppRoundActive) return;
+      _playMystery();
+      notifyListeners();
+    });
+  }
+
+  void _finishPP() {
+    _ppTimer?.cancel();
+    _ppTimer = null;
+    var allGood = true;
+    roundPitchCorrect = 0;
+    for (final j in judged) {
+      if (j.verdict == Verdict.pending) j.verdict = Verdict.missed;
+      j.revealed = true;
+      if (j.verdict == Verdict.good) {
+        roundPitchCorrect++;
+      } else {
+        allGood = false;
+      }
+    }
+    // Timing is meaningless here; mirror pitch so shared summary UI reads
+    // sensibly, but leave the timed totals untouched.
+    roundOnTime = roundPitchCorrect;
+    totalPitchEvents += roundPitchTotal;
+    totalPitchCorrect += roundPitchCorrect;
+    streak = allGood && roundPitchTotal > 0 ? streak + 1 : 0;
+
+    if (!lastRoundSkipped && roundPitchTotal > 0) {
+      roundLog.insert(
+        0,
+        RoundLogEntry(
+          number: roundLog.length + 1,
+          won: allGood,
+          perfectPitch: true,
+          notes: [
+            for (final j in judged)
+              LoggedNote(
+                target: j.event.pitch!.label,
+                verdict: j.verdict,
+                played: j.played?.label,
+              ),
+          ],
+          pitchCorrect: roundPitchCorrect,
+          onTime: roundOnTime,
+          pitchTotal: roundPitchTotal,
+        ),
+      );
+    }
+
+    phase = Phase.summary;
+    notifyListeners();
   }
 
   void _startTimeline() {
@@ -251,6 +408,7 @@ class GameController extends ChangeNotifier {
     totalPitchEvents += roundPitchTotal;
     totalPitchCorrect += roundPitchCorrect;
     totalOnTime += roundOnTime;
+    totalTimedEvents += roundPitchTotal;
     streak = allGood && roundPitchTotal > 0 ? streak + 1 : 0;
 
     if (!freePlay && !lastRoundSkipped && roundPitchTotal > 0) {
@@ -295,6 +453,8 @@ class GameController extends ChangeNotifier {
     if (freePlay) {
       if (echo.length >= settings.measures * 4) echo.clear();
       echo.add(pitch);
+    } else if (perfectPitch) {
+      if (ppRoundActive) _ppAnswer(pitch);
     } else {
       final judging = phase == Phase.performing ||
           (phase == Phase.userCount && _pos >= _userStart - 0.9);
@@ -312,16 +472,22 @@ class GameController extends ChangeNotifier {
 
   // --------------------------------------------------------------- free play
 
-  void setFreePlay(bool value) {
-    if (freePlay == value) return;
+  void setMode(GameMode value) {
+    if (mode == value) return;
     _clearPause();
-    freePlay = value;
+    mode = value;
     _ticker?.cancel();
     _ticker = null;
+    _ppTimer?.cancel();
+    _ppTimer = null;
     engine.stopAll();
     _stopMetronome();
     phase = Phase.idle;
     echo.clear();
+    judged = [];
+    melody = null;
+    ppFeedback = null;
+    ppIndex = 0;
     activeBeat = null;
     flashSemitone = null;
     notifyListeners();
@@ -423,6 +589,8 @@ class GameController extends ChangeNotifier {
   void dispose() {
     _ticker?.cancel();
     _metroTimer?.cancel();
+    _ppTimer?.cancel();
+    _flashTimer?.cancel();
     for (final v in _held.values) {
       v.release();
     }

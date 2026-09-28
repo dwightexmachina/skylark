@@ -160,6 +160,7 @@ class _GameScreenState extends State<GameScreen> {
                         onTime: controller.roundOnTime,
                         pitchTotal: controller.roundPitchTotal,
                         streak: controller.streak,
+                        showReplay: !controller.perfectPitch,
                         onDismiss: _dismissPop,
                         onNext: () {
                           _dismissPop();
@@ -362,7 +363,8 @@ class _GameScreenState extends State<GameScreen> {
           ),
                 if (!c.freePlay) ...[
                   _stat(p, 'Pitch', pct(c.totalPitchCorrect, c.totalPitchEvents)),
-                  _stat(p, 'Timing', pct(c.totalOnTime, c.totalPitchEvents)),
+                  if (!c.perfectPitch)
+                    _stat(p, 'Timing', pct(c.totalOnTime, c.totalTimedEvents)),
                   _stat(p, '⭐ Streak', '${c.streak}'),
                 ],
                 _logButton(p),
@@ -493,8 +495,11 @@ class _GameScreenState extends State<GameScreen> {
       ),
       padding: const EdgeInsets.all(4),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        chip('Training', !c.freePlay, () => c.setFreePlay(false)),
-        chip('Free play', c.freePlay, () => c.setFreePlay(true)),
+        chip('Training', c.mode == GameMode.training,
+            () => c.setMode(GameMode.training)),
+        chip('Perfect Pitch', c.perfectPitch,
+            () => c.setMode(GameMode.perfectPitch)),
+        chip('Free play', c.freePlay, () => c.setMode(GameMode.freePlay)),
       ]),
     );
   }
@@ -547,11 +552,22 @@ class _GameScreenState extends State<GameScreen> {
               children: [
                 _scoreHeader(p),
                 _DottedDivider(color: p.line),
+                if (c.perfectPitch && c.ppFeedback != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
+                    child: Text(c.ppFeedback!,
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: p.muted)),
+                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
                   child: StaffView(
                     judged: display,
-                    measures: c.melody?.measures ?? c.settings.measures,
+                    measures: c.perfectPitch
+                        ? ((display.length + 3) ~/ 4).clamp(1, 4)
+                        : c.melody?.measures ?? c.settings.measures,
                     playheadBeat: c.playheadBeat,
                     secondsPerBeat: c.secondsPerBeat,
                     neutralInk: c.freePlay,
@@ -594,34 +610,104 @@ class _GameScreenState extends State<GameScreen> {
                 if (sub != null)
                   Text(sub,
                       style: TextStyle(fontSize: 12.5, color: p.muted)),
+                if (c.ppRoundActive) ...[
+                  const SizedBox(height: 10),
+                  _hearAgain(p),
+                ],
               ],
             ),
           ),
           const SizedBox(width: 16),
-          Row(children: [
-            for (var b = 0; b < 4; b++)
-              Container(
-                width: 16,
-                height: 16,
-                margin: const EdgeInsets.only(left: 8),
-                decoration: BoxDecoration(
-                  color: c.activeBeat == b
-                      ? p.accent
-                      : const Color(0xFFEAF2FA),
-                  shape: BoxShape.circle,
-                  boxShadow: c.activeBeat == b
-                      ? [BoxShadow(color: p.accentSoft, spreadRadius: 4)]
-                      : null,
+          if (c.perfectPitch)
+            _ppDots(p)
+          else
+            Row(children: [
+              for (var b = 0; b < 4; b++)
+                Container(
+                  width: 16,
+                  height: 16,
+                  margin: const EdgeInsets.only(left: 8),
+                  decoration: BoxDecoration(
+                    color: c.activeBeat == b ? p.accent : p.soft,
+                    shape: BoxShape.circle,
+                    boxShadow: c.activeBeat == b
+                        ? [BoxShadow(color: p.accentSoft, spreadRadius: 4)]
+                        : null,
+                  ),
                 ),
-              ),
-            const SizedBox(width: 12),
-            Text('♩ = ${c.settings.bpm}',
+              const SizedBox(width: 12),
+              Text('♩ = ${c.settings.bpm}',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: p.muted)),
+            ]),
+        ],
+      ),
+    );
+  }
+
+  /// Progress dots for a Perfect Pitch round: one per mystery note.
+  Widget _ppDots(Palette p) {
+    final c = controller;
+    final n = c.judged.length;
+    if (n == 0) return const SizedBox.shrink();
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      for (var i = 0; i < n; i++)
+        Container(
+          width: 13,
+          height: 13,
+          margin: const EdgeInsets.only(left: 7),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: switch (c.judged[i].verdict) {
+              Verdict.good => p.good,
+              Verdict.wrongPitch || Verdict.missed => p.bad,
+              _ => (c.ppRoundActive && i == c.ppIndex) ? p.accent : p.soft,
+            },
+            boxShadow: (c.ppRoundActive &&
+                    i == c.ppIndex &&
+                    c.judged[i].verdict == Verdict.pending)
+                ? [BoxShadow(color: p.accentSoft, spreadRadius: 4)]
+                : null,
+          ),
+        ),
+    ]);
+  }
+
+  Widget _hearAgain(Palette p) {
+    final c = controller;
+    final left = c.ppReplaysLeft;
+    final enabled = left != 0;
+    final suffix = switch (left) {
+      -1 => ' · unlimited',
+      0 => ' · none left',
+      1 => ' · 1 left',
+      _ => ' · $left left',
+    };
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: enabled ? c.ppHearAgain : null,
+          child: Container(
+            decoration: BoxDecoration(
+              color: p.tonicSoft,
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: [
+                BoxShadow(color: p.blueShadow, offset: const Offset(0, 3)),
+              ],
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text('↻  Hear it again$suffix',
                 style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: p.muted)),
-          ]),
-        ],
+                    color: p.tonic)),
+          ),
+        ),
       ),
     );
   }
@@ -636,6 +722,27 @@ class _GameScreenState extends State<GameScreen> {
         'Free play',
         'The staff echoes what you play — no judging. Turn on the metronome to practice in time.'
       );
+    }
+    if (c.perfectPitch) {
+      switch (c.phase) {
+        case Phase.performing:
+          return (
+            'Note ${c.ppIndex + 1} of ${c.judged.length} — what do you hear?',
+            'No tonic, no pulse. Press the key you think it is — your first press counts.'
+          );
+        case Phase.summary:
+          return (
+            'Round ${c.roundNumber}: ${c.roundPitchCorrect}/${c.roundPitchTotal} identified',
+            c.streak > 0
+                ? 'Perfect — streak ${c.streak}! Press Next round to keep it going.'
+                : 'Press Next round to try another set.'
+          );
+        default:
+          return (
+            'Ready when you are',
+            'Press Play round — ${c.settings.ppNotes} mystery notes await. No tonic, no pulse.'
+          );
+      }
     }
     final measures = c.melody?.measures ?? c.settings.measures;
     switch (c.phase) {
@@ -703,7 +810,7 @@ class _GameScreenState extends State<GameScreen> {
             onTap: active ? null : c.playRound,
           ),
         ),
-        if (active)
+        if (active && !c.perfectPitch)
           _button(p, c.paused ? '▶  Resume' : '❚❚  Pause',
               blue: !c.paused, primary: c.paused, onTap: c.togglePause),
         if (c.melody != null && !active)

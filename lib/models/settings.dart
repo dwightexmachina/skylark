@@ -25,6 +25,7 @@ class Settings {
   /// Selected pitch classes as semitones from C (0–11).
   final Set<int> noteSet;
   final int measures; // 1–4
+  final int ppNotes; // Perfect Pitch: mystery notes per round, 1–10
   final int bpm; // 40–140
   final TimingWindow window;
   final bool tonicFirst;
@@ -39,6 +40,7 @@ class Settings {
   const Settings({
     this.noteSet = const {0, 2, 4, 5, 7}, // C D E F G
     this.measures = 1,
+    this.ppNotes = 5,
     this.bpm = 80,
     this.window = TimingWindow.loose, // matches the Beginner default
 
@@ -53,6 +55,7 @@ class Settings {
   Settings copyWith({
     Set<int>? noteSet,
     int? measures,
+    int? ppNotes,
     int? bpm,
     TimingWindow? window,
     bool? tonicFirst,
@@ -65,6 +68,7 @@ class Settings {
     return Settings(
       noteSet: noteSet ?? this.noteSet,
       measures: measures ?? this.measures,
+      ppNotes: ppNotes ?? this.ppNotes,
       bpm: bpm ?? this.bpm,
       window: window ?? this.window,
       tonicFirst: tonicFirst ?? this.tonicFirst,

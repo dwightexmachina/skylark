@@ -206,6 +206,25 @@ class RoundLogPop extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: e.won ? p.good : p.bad)),
         ),
+        if (e.perfectPitch) ...[
+          const SizedBox(width: 6),
+          Tooltip(
+            message: 'Perfect Pitch round',
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: p.tonicSoft,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text('PP',
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: p.tonic)),
+            ),
+          ),
+        ],
         const SizedBox(width: 10),
         Expanded(
           child: Wrap(
