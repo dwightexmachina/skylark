@@ -86,7 +86,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
             SliderTheme(
               data: SliderThemeData(
                 activeTrackColor: p.tonicSoft,
-                inactiveTrackColor: const Color(0xFFEAF2FA),
+                inactiveTrackColor: p.soft,
                 thumbColor: p.accent,
                 overlayColor: p.accentSoft.withValues(alpha: 0.5),
                 trackHeight: 8,
@@ -177,7 +177,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                     activeThumbColor: p.accent,
                     activeTrackColor: p.tonicSoft,
                     inactiveThumbColor: p.surface,
-                    inactiveTrackColor: const Color(0xFFEAF2FA),
+                    inactiveTrackColor: p.soft,
                     thumbIcon: WidgetStateProperty.resolveWith(
                       (states) => states.contains(WidgetState.selected)
                           ? Icon(Icons.wb_sunny, size: 14, color: p.onAccent)
@@ -285,7 +285,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w700,
-            color: on ? p.onAccent : p.keyBlackDisabled,
+            color: on
+                ? p.onAccent
+                : (p.isNight ? p.muted : p.keyBlackDisabled),
           ),
         ),
       ),
@@ -348,7 +350,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFEAF2FA),
+        color: p.soft,
         borderRadius: BorderRadius.circular(999),
       ),
       padding: const EdgeInsets.all(4),

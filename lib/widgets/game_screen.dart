@@ -4,11 +4,13 @@ import 'package:flutter/services.dart';
 import '../models/note.dart';
 import '../models/round.dart';
 import '../state/game_controller.dart';
+import '../state/theme_controller.dart';
 import '../state/tutorial_controller.dart';
 import '../ui/palette.dart';
 import 'keyboard.dart';
 import 'lark.dart';
 import 'result_pop.dart';
+import 'round_log_pop.dart';
 import 'settings_panel.dart';
 import 'splash_screen.dart';
 import 'staff.dart';
@@ -34,6 +36,7 @@ class _GameScreenState extends State<GameScreen> {
   final ValueNotifier<int> _scrollTick = ValueNotifier(0);
 
   bool _splashVisible = true;
+  bool _logVisible = false;
   final GlobalKey<SplashScreenState> _splashKey = GlobalKey();
 
   /// Timeline attempt whose result pop was dismissed (-1 = none).
@@ -87,6 +90,10 @@ class _GameScreenState extends State<GameScreen> {
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (event is KeyDownEvent && _logVisible) {
+        setState(() => _logVisible = false);
+        return KeyEventResult.handled;
+      }
       if (event is KeyDownEvent && tutorial.popupVisible) {
         tutorial.skip();
         return KeyEventResult.handled;
@@ -108,7 +115,16 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    ThemeController.instance.addListener(_onThemeChanged);
+  }
+
+  void _onThemeChanged() => setState(() {});
+
+  @override
   void dispose() {
+    ThemeController.instance.removeListener(_onThemeChanged);
     tutorial.dispose();
     controller.dispose();
     _scrollTick.dispose();
@@ -157,6 +173,13 @@ class _GameScreenState extends State<GameScreen> {
                     : const SizedBox.shrink(),
               ),
             ),
+            if (_logVisible)
+              Positioned.fill(
+                child: RoundLogPop(
+                  controller: controller,
+                  onDismiss: () => setState(() => _logVisible = false),
+                ),
+              ),
             Positioned.fill(
               child: TutorialOverlay(
                 tut: tutorial,
@@ -212,7 +235,14 @@ class _GameScreenState extends State<GameScreen> {
                 ],
               ),
               clipBehavior: Clip.antiAlias,
-              child: Column(
+              child: Stack(children: [
+                if (p.isNight)
+                  const Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(painter: _NightSkyPainter()),
+                    ),
+                  ),
+                Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _topBar(p),
@@ -251,6 +281,7 @@ class _GameScreenState extends State<GameScreen> {
                   }),
                 ],
               ),
+              ]),
             ),
           ),
         ),
@@ -280,12 +311,16 @@ class _GameScreenState extends State<GameScreen> {
         den == 0 ? '—' : '${(100 * num / den).round()}%';
     return Padding(
       padding: const EdgeInsets.fromLTRB(26, 18, 26, 12),
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 14,
-        runSpacing: 10,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(mainAxisSize: MainAxisSize.min, children: [
+          Expanded(
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 14,
+              runSpacing: 10,
+              children: [
+                Row(mainAxisSize: MainAxisSize.min, children: [
             Padding(
               padding: const EdgeInsets.only(right: 9),
               child: CustomPaint(
@@ -325,13 +360,105 @@ class _GameScreenState extends State<GameScreen> {
               ),
             ),
           ),
-          if (!c.freePlay) ...[
-            _stat(p, 'Pitch', pct(c.totalPitchCorrect, c.totalPitchEvents)),
-            _stat(p, 'Timing', pct(c.totalOnTime, c.totalPitchEvents)),
-            _stat(p, '⭐ Streak', '${c.streak}'),
-          ],
+                if (!c.freePlay) ...[
+                  _stat(p, 'Pitch', pct(c.totalPitchCorrect, c.totalPitchEvents)),
+                  _stat(p, 'Timing', pct(c.totalOnTime, c.totalPitchEvents)),
+                  _stat(p, '⭐ Streak', '${c.streak}'),
+                ],
+                _logButton(p),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          _dayNightToggle(p),
         ],
       ),
+    );
+  }
+
+  Widget _logButton(Palette p) {
+    final count = controller.roundLog.length;
+    return InkWell(
+      onTap: () => setState(() => _logVisible = true),
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        decoration: BoxDecoration(
+          color: p.surface.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(999),
+          boxShadow: [
+            BoxShadow(color: p.cardShadow, offset: const Offset(0, 3)),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.receipt_long_rounded, size: 15, color: p.muted),
+          const SizedBox(width: 5),
+          Text('Log',
+              style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: p.ink)),
+          if (count > 0) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+              decoration: BoxDecoration(
+                color: p.accent,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text('$count',
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: p.onAccent)),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+
+  Widget _dayNightToggle(Palette p) {
+    Widget chip(IconData icon, String label, bool selected, bool toNight) =>
+        InkWell(
+          onTap: () => ThemeController.instance.setNight(toNight),
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected ? p.accent : Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: selected
+                  ? [BoxShadow(color: p.accentShadow, offset: const Offset(0, 2))]
+                  : null,
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon,
+                  size: 14, color: selected ? p.onAccent : p.muted),
+              const SizedBox(width: 5),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? p.onAccent : p.muted)),
+            ]),
+          ),
+        );
+    final night = p.isNight;
+    return Container(
+      decoration: BoxDecoration(
+        color: p.surface.withValues(alpha: night ? 0.85 : 0.72),
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(color: p.cardShadow, offset: const Offset(0, 3)),
+        ],
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        chip(Icons.wb_sunny_rounded, 'Day', !night, false),
+        chip(Icons.nightlight_round, 'Night', night, true),
+      ]),
     );
   }
 
@@ -687,4 +814,75 @@ class _DotsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DotsPainter old) => old.color != color;
+}
+
+/// Night dressing behind the app content: twinkle stars and
+/// night-cloud silhouettes.
+class _NightSkyPainter extends CustomPainter {
+  const _NightSkyPainter();
+
+  // (fx, fy, radius, opacity) in fractions of the frame.
+  static const _stars = [
+    (0.06, 0.06, 2.4, 0.9),
+    (0.16, 0.16, 1.6, 0.55),
+    (0.30, 0.05, 2.0, 0.8),
+    (0.44, 0.12, 1.4, 0.5),
+    (0.55, 0.04, 2.2, 0.85),
+    (0.66, 0.17, 1.5, 0.5),
+    (0.78, 0.07, 2.4, 0.9),
+    (0.90, 0.13, 1.6, 0.55),
+    (0.09, 0.42, 1.5, 0.45),
+    (0.50, 0.30, 1.3, 0.4),
+    (0.93, 0.38, 1.8, 0.6),
+    (0.03, 0.68, 1.8, 0.5),
+    (0.97, 0.62, 1.5, 0.5),
+    (0.38, 0.50, 1.2, 0.35),
+  ];
+
+  void _sparkle(Canvas canvas, Offset c, double r, Paint paint) {
+    final p = Path()
+      ..moveTo(c.dx, c.dy - r * 2)
+      ..quadraticBezierTo(c.dx, c.dy, c.dx + r * 2, c.dy)
+      ..quadraticBezierTo(c.dx, c.dy, c.dx, c.dy + r * 2)
+      ..quadraticBezierTo(c.dx, c.dy, c.dx - r * 2, c.dy)
+      ..quadraticBezierTo(c.dx, c.dy, c.dx, c.dy - r * 2)
+      ..close();
+    canvas.drawPath(p, paint);
+  }
+
+  void _puff(Canvas canvas, Offset c, double w, Color color) {
+    final paint = Paint()..color = color;
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: c.translate(-w * 0.16, w * 0.05),
+            width: w * 0.62,
+            height: w * 0.24),
+        paint);
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: c.translate(w * 0.14, -w * 0.02),
+            width: w * 0.52,
+            height: w * 0.22),
+        paint);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final (fx, fy, r, o) in _stars) {
+      _sparkle(
+          canvas,
+          Offset(fx * size.width, fy * size.height),
+          r,
+          Paint()..color = Color.fromRGBO(0xCB, 0xD6, 0xFF, o));
+    }
+    _puff(canvas, Offset(size.width * 0.10, size.height * 0.10), 140,
+        const Color(0xCC232E58));
+    _puff(canvas, Offset(size.width * 0.88, size.height * 0.22), 110,
+        const Color(0x99232E58));
+    _puff(canvas, Offset(size.width * 0.16, size.height * 0.86), 120,
+        const Color(0x88232E58));
+  }
+
+  @override
+  bool shouldRepaint(_NightSkyPainter old) => false;
 }

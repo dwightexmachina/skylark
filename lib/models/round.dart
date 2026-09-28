@@ -14,6 +14,31 @@ class JudgedEvent {
   bool get isRest => event.isRest;
 }
 
+/// One pitch event of a completed round, frozen for the session log.
+class LoggedNote {
+  final String target; // what Skylark played, e.g. 'C4'
+  final Verdict verdict;
+  final String? played; // what the user played, when it was a wrong pitch
+  const LoggedNote(
+      {required this.target, required this.verdict, this.played});
+}
+
+/// A completed training round in the session log (in memory only).
+class RoundLogEntry {
+  final int number; // 1-based, in the order rounds were completed
+  final bool won; // perfect round: every note right and on time
+  final List<LoggedNote> notes;
+  final int pitchCorrect, onTime, pitchTotal;
+  const RoundLogEntry({
+    required this.number,
+    required this.won,
+    required this.notes,
+    required this.pitchCorrect,
+    required this.onTime,
+    required this.pitchTotal,
+  });
+}
+
 enum Phase { idle, tonic, countIn, listening, userCount, performing, summary }
 
 extension PhaseX on Phase {

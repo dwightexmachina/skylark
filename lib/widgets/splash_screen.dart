@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../state/theme_controller.dart';
 import 'lark.dart';
 
 /// "Dawn Chorus": full-bleed sunrise splash. A huge sun climbs from the
@@ -66,28 +67,41 @@ class SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final night = ThemeController.instance.night;
     final scene = Stack(
       clipBehavior: Clip.hardEdge,
       fit: StackFit.expand,
       children: [
-        // Dawn sky.
-        const DecoratedBox(
+        // Dawn (or moonrise) sky.
+        DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFF5B8FD0),
-                Color(0xFF7FB4E6),
-                Color(0xFFA6D8F5),
-                Color(0xFFFFDFA3),
-                Color(0xFFFFD27A),
-              ],
-              stops: [0, 0.30, 0.55, 0.88, 1],
+              colors: night
+                  ? const [
+                      Color(0xFF10173A),
+                      Color(0xFF1A2450),
+                      Color(0xFF273463),
+                      Color(0xFF433F6F),
+                      Color(0xFF564C7B),
+                    ]
+                  : const [
+                      Color(0xFF5B8FD0),
+                      Color(0xFF7FB4E6),
+                      Color(0xFFA6D8F5),
+                      Color(0xFFFFDFA3),
+                      Color(0xFFFFD27A),
+                    ],
+              stops: const [0, 0.30, 0.55, 0.88, 1],
             ),
           ),
         ),
-        // Rising sun.
+        if (night)
+          const Positioned.fill(
+            child: IgnorePointer(child: CustomPaint(painter: _StarsPainter())),
+          ),
+        // Rising sun (a moon after dark).
         Positioned(
           bottom: -180,
           left: 0,
@@ -98,7 +112,8 @@ class SplashScreenState extends State<SplashScreen>
               builder: (context, _) => CustomPaint(
                 size: const Size(360, 360),
                 painter: _SunrisePainter(
-                    rotation: _reduce ? 0 : _spin.value * 2 * math.pi),
+                    rotation: _reduce ? 0 : _spin.value * 2 * math.pi,
+                    night: night),
               ),
             ),
           ),
@@ -158,7 +173,8 @@ class SplashScreenState extends State<SplashScreen>
       },
       child: IgnorePointer(
         child: CustomPaint(
-            size: Size(w, w * 0.34), painter: _PuffPainter()),
+            size: Size(w, w * 0.34),
+            painter: _PuffPainter(night: ThemeController.instance.night)),
       ),
     );
   }
@@ -296,11 +312,32 @@ class SplashScreenState extends State<SplashScreen>
 
 class _SunrisePainter extends CustomPainter {
   final double rotation;
-  _SunrisePainter({required this.rotation});
+  final bool night;
+  _SunrisePainter({required this.rotation, this.night = false});
 
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
+    if (night) {
+      // Moonrise: soft halo, cream disc, a few craters — no rays.
+      canvas.drawCircle(
+          c,
+          190,
+          Paint()
+            ..color = const Color(0x40F5F0D6)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 46));
+      final core = Paint()
+        ..shader = const RadialGradient(
+          center: Alignment(-0.25, -0.4),
+          colors: [Color(0xFFFBF6DE), Color(0xFFE4DAAC)],
+        ).createShader(Rect.fromCircle(center: c, radius: 172));
+      canvas.drawCircle(c, 172, core);
+      final crater = Paint()..color = const Color(0x2E6E6540);
+      canvas.drawCircle(c.translate(-52, -84), 20, crater);
+      canvas.drawCircle(c.translate(38, -58), 13, crater);
+      canvas.drawCircle(c.translate(-6, -120), 9, crater);
+      return;
+    }
     // Halo glow.
     canvas.drawCircle(
         c,
@@ -332,24 +369,69 @@ class _SunrisePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SunrisePainter old) => old.rotation != rotation;
+  bool shouldRepaint(_SunrisePainter old) =>
+      old.rotation != rotation || old.night != night;
+}
+
+/// Static star field for the night splash.
+class _StarsPainter extends CustomPainter {
+  const _StarsPainter();
+
+  static const _stars = [
+    (0.07, 0.10, 2.4, 0.9),
+    (0.18, 0.22, 1.6, 0.55),
+    (0.29, 0.08, 2.0, 0.8),
+    (0.41, 0.16, 1.4, 0.5),
+    (0.53, 0.06, 2.2, 0.85),
+    (0.64, 0.20, 1.5, 0.5),
+    (0.77, 0.09, 2.4, 0.9),
+    (0.89, 0.17, 1.6, 0.55),
+    (0.11, 0.40, 1.5, 0.45),
+    (0.33, 0.33, 1.2, 0.4),
+    (0.68, 0.36, 1.4, 0.45),
+    (0.93, 0.40, 1.8, 0.6),
+    (0.05, 0.62, 1.6, 0.5),
+    (0.95, 0.60, 1.4, 0.45),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final (fx, fy, r, o) in _stars) {
+      final c = Offset(fx * size.width, fy * size.height);
+      final p = Path()
+        ..moveTo(c.dx, c.dy - r * 2)
+        ..quadraticBezierTo(c.dx, c.dy, c.dx + r * 2, c.dy)
+        ..quadraticBezierTo(c.dx, c.dy, c.dx, c.dy + r * 2)
+        ..quadraticBezierTo(c.dx, c.dy, c.dx - r * 2, c.dy)
+        ..quadraticBezierTo(c.dx, c.dy, c.dx, c.dy - r * 2)
+        ..close();
+      canvas.drawPath(p, Paint()..color = Color.fromRGBO(0xCB, 0xD6, 0xFF, o));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_StarsPainter old) => false;
 }
 
 class _PuffPainter extends CustomPainter {
+  final bool night;
+  _PuffPainter({this.night = false});
+
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
+    final base = night ? const Color(0xFF2A3560) : Colors.white;
     canvas.drawOval(
         Rect.fromCenter(
             center: Offset(w * 0.33, h * 0.68), width: w * 0.6, height: h * 0.62),
-        Paint()..color = Colors.white.withValues(alpha: 0.9));
+        Paint()..color = base.withValues(alpha: 0.9));
     canvas.drawOval(
         Rect.fromCenter(
             center: Offset(w * 0.66, h * 0.52), width: w * 0.52, height: h * 0.58),
-        Paint()..color = Colors.white.withValues(alpha: 0.7));
+        Paint()..color = base.withValues(alpha: 0.7));
   }
 
   @override
-  bool shouldRepaint(_PuffPainter old) => false;
+  bool shouldRepaint(_PuffPainter old) => old.night != night;
 }

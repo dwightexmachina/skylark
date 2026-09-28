@@ -71,8 +71,12 @@ class _ResultPopState extends State<ResultPop> with TickerProviderStateMixin {
       children: [
         CustomPaint(
           painter: CloudCardPainter(
-            fill: lost ? const Color(0xFFF7FAFD) : p.surface,
-            lobeFill: lost ? const Color(0xFFEDF2F8) : null,
+            fill: lost
+                ? (p.isNight ? const Color(0xFF3A4569) : const Color(0xFFF7FAFD))
+                : p.surface,
+            lobeFill: lost
+                ? (p.isNight ? const Color(0xFF333D60) : const Color(0xFFEDF2F8))
+                : null,
             shadow: p.cardShadow,
           ),
           child: Container(
@@ -124,7 +128,9 @@ class _ResultPopState extends State<ResultPop> with TickerProviderStateMixin {
           behavior: HitTestBehavior.opaque,
           onTap: widget.onDismiss,
           child: ColoredBox(
-              color: const Color(0xFF1E325A).withValues(alpha: 0.35)),
+              color: p.isNight
+                  ? const Color(0xFF06091C).withValues(alpha: 0.5)
+                  : const Color(0xFF1E325A).withValues(alpha: 0.35)),
         ),
       ),
       Center(child: animated),
@@ -134,8 +140,10 @@ class _ResultPopState extends State<ResultPop> with TickerProviderStateMixin {
   Widget _content(Palette p) {
     final t = widget.tier;
     final (title, titleColor) = switch (t) {
-      ResultTier.perfect => ('Perfect round!', p.keyHeldText),
-      ResultTier.good => ('Nice ear!', const Color(0xFF3E7C4F)),
+      ResultTier.perfect =>
+        ('Perfect round!', p.isNight ? p.accent : p.keyHeldText),
+      ResultTier.good =>
+        ('Nice ear!', p.isNight ? p.good : const Color(0xFF3E7C4F)),
       ResultTier.lost => ('Round lost', p.staffInk),
     };
     return Column(
@@ -143,7 +151,7 @@ class _ResultPopState extends State<ResultPop> with TickerProviderStateMixin {
       children: [
         CustomPaint(
           size: const Size(64, 28),
-          painter: _FacePainter(tier: t),
+          painter: _FacePainter(tier: t, night: p.isNight),
         ),
         const SizedBox(height: 4),
         Text(title,
@@ -162,7 +170,7 @@ class _ResultPopState extends State<ResultPop> with TickerProviderStateMixin {
               style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: p.keyHeldText)),
+                  color: p.isNight ? p.accent : p.keyHeldText)),
         ],
         if (t == ResultTier.good) ...[
           const SizedBox(height: 4),
@@ -331,13 +339,18 @@ enum _B { primary, blue, plain }
 /// Two dot eyes and a mouth; cheeks when delighted, a tear when not.
 class _FacePainter extends CustomPainter {
   final ResultTier tier;
-  _FacePainter({required this.tier});
+  final bool night;
+  _FacePainter({required this.tier, this.night = false});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final ink = tier == ResultTier.lost
-        ? const Color(0xFF5B6A92)
-        : const Color(0xFF33406B);
+    final ink = night
+        ? (tier == ResultTier.lost
+            ? const Color(0xFFAAB4DE)
+            : const Color(0xFFE9EDFF))
+        : (tier == ResultTier.lost
+            ? const Color(0xFF5B6A92)
+            : const Color(0xFF33406B));
     final eye = Paint()..color = ink;
     canvas.drawCircle(Offset(size.width / 2 - 16, 8), 3.2, eye);
     canvas.drawCircle(Offset(size.width / 2 + 16, 8), 3.2, eye);
@@ -378,7 +391,8 @@ class _FacePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_FacePainter old) => old.tier != tier;
+  bool shouldRepaint(_FacePainter old) =>
+      old.tier != tier || old.night != night;
 }
 
 class _SunPainter extends CustomPainter {

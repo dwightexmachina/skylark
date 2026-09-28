@@ -182,7 +182,9 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       return const SizedBox.shrink();
     }
     final p = Palette.of(context);
-    final scrim = const Color(0xFF1E325A).withValues(alpha: 0.45);
+    final scrim = p.isNight
+        ? const Color(0xFF06091C).withValues(alpha: 0.6)
+        : const Color(0xFF1E325A).withValues(alpha: 0.45);
 
     return LayoutBuilder(builder: (context, constraints) {
       final w = constraints.maxWidth;

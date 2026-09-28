@@ -33,6 +33,11 @@ class GameController extends ChangeNotifier {
   bool lastRoundSkipped = false; // skipped rounds don't get a result pop
   int attempt = 0; // increments every started timeline (incl. replays)
 
+  /// Session log of completed training rounds, newest first.
+  /// Lives in memory only: a page refresh starts it fresh.
+  final List<RoundLogEntry> roundLog = [];
+  int get roundsWon => roundLog.where((e) => e.won).length;
+
   // Timeline (beats from _t0 at AudioContext time).
   double _t0 = 0;
   double _spb = 0.75; // seconds per beat
@@ -247,6 +252,28 @@ class GameController extends ChangeNotifier {
     totalPitchCorrect += roundPitchCorrect;
     totalOnTime += roundOnTime;
     streak = allGood && roundPitchTotal > 0 ? streak + 1 : 0;
+
+    if (!freePlay && !lastRoundSkipped && roundPitchTotal > 0) {
+      roundLog.insert(
+        0,
+        RoundLogEntry(
+          number: roundLog.length + 1,
+          won: allGood,
+          notes: [
+            for (final j in judged)
+              if (!j.isRest)
+                LoggedNote(
+                  target: j.event.pitch!.label,
+                  verdict: j.verdict,
+                  played: j.played?.label,
+                ),
+          ],
+          pitchCorrect: roundPitchCorrect,
+          onTime: roundOnTime,
+          pitchTotal: roundPitchTotal,
+        ),
+      );
+    }
 
     phase = Phase.summary;
     activeBeat = null;

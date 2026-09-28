@@ -37,7 +37,7 @@ class Settings {
   final bool allowRests;
 
   const Settings({
-    this.noteSet = const {0, 4, 7}, // C major triad
+    this.noteSet = const {0, 2, 4, 5, 7}, // C D E F G
     this.measures = 1,
     this.bpm = 80,
     this.window = TimingWindow.loose, // matches the Beginner default
