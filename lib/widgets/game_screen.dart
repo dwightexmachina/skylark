@@ -81,6 +81,7 @@ class _GameScreenState extends State<GameScreen> {
     LogicalKeyboardKey.keyH: 9,
     LogicalKeyboardKey.keyU: 10,
     LogicalKeyboardKey.keyJ: 11,
+    LogicalKeyboardKey.keyK: 12,
   };
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {

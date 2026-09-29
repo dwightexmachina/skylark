@@ -6,24 +6,29 @@ const List<String> pitchClassLabels = [
 
 const Set<int> blackSemitones = {1, 3, 6, 8, 10};
 
-/// Diatonic letter index (0 = C … 6 = B) and sharp flag for each semitone.
+/// Semitones from C4; the octave key C5 (12) tops the playable range.
+const int semitoneCount = 13;
+
+/// Diatonic letter index (0 = C4 … 7 = C5) and sharp flag for each semitone.
 const List<(int, bool)> _diatonic = [
   (0, false), (0, true), (1, false), (1, true), (2, false), (3, false),
   (3, true), (4, false), (4, true), (5, false), (5, true), (6, false),
+  (7, false),
 ];
 
-/// A pitch in the app's single playable octave, C4–B4.
+/// A pitch in the app's playable range, C4–C5.
 class Pitch {
-  final int semitone; // 0 = C4 … 11 = B4
+  final int semitone; // 0 = C4 … 12 = C5
 
-  const Pitch(this.semitone) : assert(semitone >= 0 && semitone < 12);
+  const Pitch(this.semitone)
+      : assert(semitone >= 0 && semitone < semitoneCount);
 
   int get midi => 60 + semitone;
   double get frequency => 440.0 * math.pow(2, (midi - 69) / 12);
-  String get label => '${pitchClassLabels[semitone]}4';
-  bool get isBlack => blackSemitones.contains(semitone);
+  String get label => '${pitchClassLabels[semitone % 12]}${4 + semitone ~/ 12}';
+  bool get isBlack => blackSemitones.contains(semitone % 12);
 
-  /// Diatonic letter (0 = C … 6 = B) for staff placement.
+  /// Diatonic letter (0 = C4 … 7 = C5) for staff placement.
   int get letter => _diatonic[semitone].$1;
   bool get isSharp => _diatonic[semitone].$2;
 

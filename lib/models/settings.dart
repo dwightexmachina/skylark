@@ -22,7 +22,7 @@ enum Difficulty {
 }
 
 class Settings {
-  /// Selected pitch classes as semitones from C (0–11).
+  /// Selected notes as semitones from C4 (0–12; 12 = C5).
   final Set<int> noteSet;
   final int measures; // 1–4
   final int ppNotes; // Perfect Pitch: mystery notes per round, 1–10

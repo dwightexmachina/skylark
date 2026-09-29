@@ -5,13 +5,13 @@ import '../models/round.dart';
 import '../state/game_controller.dart';
 import '../ui/palette.dart';
 
-const _whiteSemitones = [0, 2, 4, 5, 7, 9, 11];
+const _whiteSemitones = [0, 2, 4, 5, 7, 9, 11, 12];
 // Black keys sit at the boundary after white key n (1-indexed): C♯ after C, etc.
 const _blackKeys = [(1, 1), (3, 2), (6, 4), (8, 5), (10, 6)];
 
 /// Physical key for each semitone (piano-style DAW mapping).
 const keyboardLetters = [
-  'A', 'W', 'S', 'E', 'D', 'F', 'T', 'G', 'Y', 'H', 'U', 'J',
+  'A', 'W', 'S', 'E', 'D', 'F', 'T', 'G', 'Y', 'H', 'U', 'J', 'K',
 ];
 
 class KeyboardView extends StatelessWidget {
@@ -42,7 +42,7 @@ class KeyboardView extends StatelessWidget {
             ),
             for (final (semitone, n) in _blackKeys)
               Positioned(
-                left: w * (n / 7) - w * 0.045,
+                left: w * (n / _whiteSemitones.length) - w * 0.045,
                 top: 0,
                 width: w * 0.09,
                 height: 96,

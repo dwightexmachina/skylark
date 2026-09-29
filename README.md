@@ -9,7 +9,7 @@ A browser-based melodic and rhythmic dictation game, built with Flutter web.
 Pick a set of notes and a difficulty. Each training round plays a reference
 tonic, a count-in, then a short melody in 4/4 against a metronome — varied note
 lengths and rests included. On your count-in you play it back **in time** on a
-one-octave keyboard (mouse, or computer keys `A S D F G H J` + `W E T Y U` for
+C4–C5 keyboard (mouse, or computer keys `A S D F G H J K` + `W E T Y U` for
 sharps; rests are performed by waiting). The staff stays blank during playback
 — pure dictation — and fills in note by note as you answer, each note judged on
 pitch (green/red) and timing (amber = right pitch, off the beat).

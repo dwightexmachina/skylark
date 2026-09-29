@@ -87,8 +87,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
             _sub(
                 p,
                 c.perfectPitch
-                    ? '${s.noteSet.length} of 12 selected — the real difficulty dial. At least 2 required.'
-                    : '${s.noteSet.length} of 12 selected. At least 2 required.'),
+                    ? '${s.noteSet.length} of $semitoneCount selected — the real difficulty dial. At least 2 required.'
+                    : '${s.noteSet.length} of $semitoneCount selected. At least 2 required.'),
             const SizedBox(height: 20),
             _head(p, c.perfectPitch ? 'Notes per round' : 'Length'),
             const SizedBox(height: 8),
@@ -303,12 +303,12 @@ class _SettingsPanelState extends State<SettingsPanel> {
 
   Widget _noteChips(Palette p, GameController c) {
     return LayoutBuilder(builder: (context, constraints) {
-      final chipW = (constraints.maxWidth - 5 * 7) / 6;
+      final chipW = (constraints.maxWidth - 6 * 7) / 7;
       return Wrap(
         spacing: 7,
         runSpacing: 7,
         children: [
-          for (var s = 0; s < 12; s++) _chip(p, c, s, chipW),
+          for (var s = 0; s < semitoneCount; s++) _chip(p, c, s, chipW),
         ],
       );
     });
@@ -333,7 +333,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
         ),
         alignment: Alignment.center,
         child: Text(
-          pitchClassLabels[semitone],
+          semitone < 12 ? pitchClassLabels[semitone] : Pitch(semitone).label,
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w700,
