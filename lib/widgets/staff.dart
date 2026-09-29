@@ -15,6 +15,10 @@ class StaffView extends StatelessWidget {
   /// Free play: render pending notes in ink (no verdict semantics).
   final bool neutralInk;
 
+  /// Perfect Pitch: draw wrong answers as a dyad — the guess in red plus
+  /// the correct note in amber — instead of the lone target notehead.
+  final bool wrongDyad;
+
   const StaffView({
     super.key,
     required this.judged,
@@ -22,6 +26,7 @@ class StaffView extends StatelessWidget {
     required this.playheadBeat,
     required this.secondsPerBeat,
     this.neutralInk = false,
+    this.wrongDyad = false,
   });
 
   @override
@@ -47,6 +52,7 @@ class StaffView extends StatelessWidget {
                 secondsPerBeat: secondsPerBeat,
                 palette: palette,
                 neutralInk: neutralInk,
+                wrongDyad: wrongDyad,
               ),
             ),
           ),
@@ -63,6 +69,7 @@ class _StaffPainter extends CustomPainter {
   final double secondsPerBeat;
   final Palette palette;
   final bool neutralInk;
+  final bool wrongDyad;
 
   _StaffPainter({
     required this.judged,
@@ -71,6 +78,7 @@ class _StaffPainter extends CustomPainter {
     required this.secondsPerBeat,
     required this.palette,
     required this.neutralInk,
+    required this.wrongDyad,
   });
 
   static const double g = 9; // gap between staff lines
@@ -223,20 +231,8 @@ class _StaffPainter extends CustomPainter {
     canvas.drawPath(p, paint);
   }
 
-  void _drawNote(Canvas canvas, JudgedEvent j, {JudgedEvent? beamedWith}) {
-    final e = j.event;
-    final pitch = e.pitch!;
-    final color = _verdictColor(j.verdict);
-    final x = _beatToX(e.startBeat);
-    final y = _letterY(pitch.letter);
-    final hollow = e.durationBeats >= 2 || j.verdict == Verdict.missed;
-
-    // Ledger line for C4.
-    if (pitch.letter == 0) {
-      canvas.drawLine(Offset(x - 11, y), Offset(x + 11, y),
-          Paint()..color = palette.staff..strokeWidth = 2);
-    }
-
+  void _drawHead(Canvas canvas, double x, double y, Color color,
+      {bool hollow = false}) {
     canvas.save();
     canvas.translate(x, y);
     canvas.rotate(-0.32);
@@ -247,6 +243,76 @@ class _StaffPainter extends CustomPainter {
     canvas.drawOval(
         Rect.fromCenter(center: Offset.zero, width: 14, height: 10), headPaint);
     canvas.restore();
+  }
+
+  void _drawLedger(Canvas canvas, double x, double y) {
+    canvas.drawLine(Offset(x - 11, y), Offset(x + 11, y),
+        Paint()..color = palette.staff..strokeWidth = 2);
+  }
+
+  /// Wrong Perfect Pitch answer: the guess (red) and the correct note
+  /// (amber) share one beat and one stem.
+  void _drawWrongDyad(Canvas canvas, JudgedEvent j) {
+    final played = j.played!;
+    final target = j.event.pitch!;
+    final x = _beatToX(j.event.startBeat);
+    final yPlayed = _letterY(played.letter);
+    final yTarget = _letterY(target.letter);
+
+    // A unison or second can't stack in one column: the higher head moves
+    // to the stem's right side, notation-style.
+    final adjacent = (played.letter - target.letter).abs() <= 1;
+    final playedIsHigher = played.semitone > target.semitone;
+    double xOf(bool isPlayed) =>
+        adjacent && (isPlayed == playedIsHigher) ? x + 12.4 : x;
+
+    for (final (pitch, isPlayed) in [(target, false), (played, true)]) {
+      if (pitch.letter == 0) {
+        _drawLedger(canvas, xOf(isPlayed), _letterY(0));
+      }
+    }
+
+    // One shared stem from the lower head up past the higher one.
+    final yLow = yPlayed > yTarget ? yPlayed : yTarget;
+    final yHigh = yPlayed > yTarget ? yTarget : yPlayed;
+    canvas.drawLine(Offset(x + 6.2, yLow - 2), Offset(x + 6.2, yHigh - 3.4 * g),
+        Paint()..color = palette.warn..strokeWidth = 1.8);
+
+    _drawHead(canvas, xOf(false), yTarget, palette.warn);
+    _drawHead(canvas, xOf(true), yPlayed, palette.bad);
+
+    // Accidentals stack to the left of the whole dyad.
+    var sharpX = x - 22.0;
+    for (final (pitch, y, color) in [
+      (target, yTarget, palette.warn),
+      (played, yPlayed, palette.bad),
+    ]) {
+      if (pitch.isSharp) {
+        _text(canvas, '♯', Offset(sharpX, y - 11), 17, color);
+        sharpX -= 14;
+      }
+    }
+  }
+
+  void _drawNote(Canvas canvas, JudgedEvent j, {JudgedEvent? beamedWith}) {
+    if (wrongDyad && j.verdict == Verdict.wrongPitch && j.played != null) {
+      _drawWrongDyad(canvas, j);
+      return;
+    }
+
+    final e = j.event;
+    final pitch = e.pitch!;
+    final color = _verdictColor(j.verdict);
+    final x = _beatToX(e.startBeat);
+    final y = _letterY(pitch.letter);
+    final hollow = e.durationBeats >= 2 || j.verdict == Verdict.missed;
+
+    // Ledger line for C4.
+    if (pitch.letter == 0) {
+      _drawLedger(canvas, x, y);
+    }
+
+    _drawHead(canvas, x, y, color, hollow: hollow);
 
     if (pitch.isSharp) {
       _text(canvas, '♯', Offset(x - 22, y - 11), 17, color);

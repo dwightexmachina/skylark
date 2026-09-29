@@ -212,24 +212,18 @@ class GameController extends ChangeNotifier {
       notifyListeners();
     });
     final wrong = j.verdict != Verdict.good;
-    if (wrong) {
-      ppFeedback =
-          'You played ${played.label} — it was ${target.label}. Listen: '
-          '♪ ${played.label} → ♪ ${target.label}';
-      // The guessed note is already sounding from the press; follow with
-      // the real one so the gap between them is audible.
-      engine.scheduleNote(
-          target.frequency, settings.tone, engine.now + 0.8, 0.9);
-    } else {
-      ppFeedback = null;
-    }
+    // Each mystery note sounds exactly once — no reveal tone after a miss.
+    // The staff dyad (guess in red, answer in amber) carries the correction.
+    ppFeedback = wrong
+        ? 'You played ${played.label} — it was ${target.label}.'
+        : null;
     ppIndex++;
     if (ppIndex >= judged.length) {
       _finishPP();
       return;
     }
     _ppTimer?.cancel();
-    _ppTimer = Timer(Duration(milliseconds: wrong ? 2100 : 1100), () {
+    _ppTimer = Timer(Duration(milliseconds: wrong ? 1800 : 1100), () {
       if (!ppRoundActive) return;
       _playMystery();
       notifyListeners();

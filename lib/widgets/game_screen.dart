@@ -572,6 +572,7 @@ class _GameScreenState extends State<GameScreen> {
                     playheadBeat: c.playheadBeat,
                     secondsPerBeat: c.secondsPerBeat,
                     neutralInk: c.freePlay,
+                    wrongDyad: c.perfectPitch,
                   ),
                 ),
               ],
@@ -885,12 +886,18 @@ class _GameScreenState extends State<GameScreen> {
     return Wrap(
       spacing: 18,
       runSpacing: 6,
-      children: [
-        item(p.good, 'Right & on the beat'),
-        item(p.warn, 'Right, off the beat'),
-        item(p.bad, 'Wrong or missed'),
-        item(const Color(0xFFB9C7DC), 'Rest — float through it'),
-      ],
+      children: controller.perfectPitch
+          ? [
+              item(p.good, 'Right'),
+              item(p.bad, 'Your guess'),
+              item(p.warn, 'Correct answer'),
+            ]
+          : [
+              item(p.good, 'Right & on the beat'),
+              item(p.warn, 'Right, off the beat'),
+              item(p.bad, 'Wrong or missed'),
+              item(const Color(0xFFB9C7DC), 'Rest — float through it'),
+            ],
     );
   }
 }
