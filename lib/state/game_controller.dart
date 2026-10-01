@@ -68,8 +68,8 @@ class GameController extends ChangeNotifier {
   /// scheduled notes, and metronome exactly in place.
   bool paused = false;
 
-  // Mode: training (dictation), perfect pitch, or free play.
-  GameMode mode = GameMode.perfectPitch;
+  // Mode: training (dictation), perfect pitch, pair drill, or free play.
+  GameMode mode = GameMode.pairDrill;
 
   /// Playing surface: piano keys or guitar fingerboard. Kept coherent with
   /// the tone: guitar tones show the fingerboard, everything else the keys.

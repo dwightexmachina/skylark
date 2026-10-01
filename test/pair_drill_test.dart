@@ -25,6 +25,7 @@ void main() {
   test('playRound refuses to start without exactly two focus notes', () {
     final c = GameController();
     c.setMode(GameMode.pairDrill);
+    c.updateSettings(c.settings.copyWith(focusPair: const {})); // E4/F4 is the app default
     c.playRound();
     expect(c.phase, Phase.idle);
     c.updateSettings(c.settings.copyWith(focusPair: {4}));
@@ -36,6 +37,7 @@ void main() {
   test('toggleFocusPair selects up to two and locks the rest', () {
     final c = GameController();
     c.setMode(GameMode.pairDrill);
+    c.updateSettings(c.settings.copyWith(focusPair: const {}));
     expect(c.settings.focusPair, isEmpty);
     c.toggleFocusPair(0); // C4
     c.toggleFocusPair(4); // E4
@@ -52,6 +54,7 @@ void main() {
   test('toggleFocusPair ignores notes not enabled in the note set', () {
     final c = GameController();
     c.setMode(GameMode.pairDrill);
+    c.updateSettings(c.settings.copyWith(focusPair: const {}));
     expect(c.settings.noteSet.contains(9), isFalse); // A4 off by default
     c.toggleFocusPair(9);
     expect(c.settings.focusPair, isEmpty);
@@ -61,6 +64,7 @@ void main() {
   test('disabling a focus note cascades it out of the pair', () {
     final c = GameController();
     c.setMode(GameMode.pairDrill);
+    c.updateSettings(c.settings.copyWith(focusPair: const {}));
     c.toggleFocusPair(4); // E4
     c.toggleFocusPair(5); // F4
     expect(c.settings.focusPair, {4, 5});

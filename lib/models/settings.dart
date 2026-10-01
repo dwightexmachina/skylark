@@ -77,7 +77,7 @@ class Settings {
     this.allowHalves = false,
     this.allowEighths = false,
     this.allowRests = false,
-    this.focusPair = const {},
+    this.focusPair = const {4, 5}, // E4 and F4
     this.focusIntensity = FocusIntensity.medium,
     this.pairReplays = ReplayBudget.one,
   });
