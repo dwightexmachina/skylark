@@ -15,6 +15,10 @@ class GameController extends ChangeNotifier {
 
   Settings settings = const Settings();
 
+  GameController() {
+    engine.preload(settings.tone); // default tone is sampled; fetch it early
+  }
+
   Phase phase = Phase.idle;
   int roundNumber = 0;
   Melody? melody;
@@ -65,7 +69,7 @@ class GameController extends ChangeNotifier {
   bool paused = false;
 
   // Mode: training (dictation), perfect pitch, or free play.
-  GameMode mode = GameMode.training;
+  GameMode mode = GameMode.perfectPitch;
   bool get freePlay => mode == GameMode.freePlay;
   bool get perfectPitch => mode == GameMode.perfectPitch;
   final List<Pitch> echo = []; // notes echoed onto the staff
@@ -74,13 +78,16 @@ class GameController extends ChangeNotifier {
   double _metroStart = 0;
   double _nextClick = 0;
 
-  // Perfect Pitch round state.
-  int ppIndex = 0; // which mystery note is up
-  int ppReplaysLeft = 0; // -1 = unlimited
+  // Perfect Pitch stream state. Gameplay is a continuous stream of mystery
+  // notes; answered notes are still batched into [Settings.ppNotes]-sized
+  // log entries behind the scenes.
+  int ppReplaysLeft = 0; // -1 = unlimited; per mystery note
+  int ppAnswered = 0; // notes answered this stream
   String? ppFeedback; // teaching line after a wrong guess
   Timer? _ppTimer; // schedules the next mystery note
   Timer? _flashTimer; // clears key flashes (no ticker in this mode)
-  bool get ppRoundActive => perfectPitch && phase == Phase.performing;
+  final List<JudgedEvent> _ppBatch = []; // answered notes awaiting a log entry
+  bool get ppStreaming => perfectPitch && phase == Phase.performing;
 
   double get _pos => (engine.now - _t0) / _spb;
 
@@ -102,11 +109,11 @@ class GameController extends ChangeNotifier {
 
   void playRound() {
     if (freePlay || phase.isActiveRound) return;
-    roundNumber++;
     if (perfectPitch) {
-      _startPPRound();
+      _startPPStream();
       return;
     }
+    roundNumber++;
     melody = generateMelody(settings, _rng);
     _startTimeline();
   }
@@ -137,72 +144,80 @@ class GameController extends ChangeNotifier {
   }
 
   void skip() {
+    if (perfectPitch) {
+      stopPP();
+      return;
+    }
     if (!phase.isActiveRound) return;
     _clearPause();
     lastRoundSkipped = true;
-    if (perfectPitch) {
-      _finishPP();
-    } else {
-      _finish();
-    }
+    _finish();
   }
 
   // ------------------------------------------------------------ perfect pitch
 
-  /// One round = [Settings.ppNotes] mystery notes. Each plays with no tonic,
-  /// no count-in and no metronome; the user's first key press is the answer.
-  void _startPPRound() {
+  /// A continuous stream of mystery notes. Each plays with no tonic, no
+  /// count-in and no metronome; the user's first key press is the answer,
+  /// and the next mystery note follows until the user presses Stop.
+  void _startPPStream() {
     _clearPause();
     engine.unlock();
     _stopMetronome();
     lastRoundSkipped = false;
     attempt++;
     melody = null;
-    final pool = settings.noteSet.toList();
-    judged = [
-      for (var i = 0; i < settings.ppNotes; i++)
-        JudgedEvent(NoteEvent(
-            startBeat: i.toDouble(),
-            durationBeats: 1,
-            pitch: Pitch(pool[_rng.nextInt(pool.length)]))),
-    ];
-    roundPitchTotal = judged.length;
-    ppIndex = 0;
+    judged = [];
+    _ppBatch.clear();
+    ppAnswered = 0;
     ppFeedback = null;
+    phase = Phase.performing;
+    activeBeat = null;
+    flashSemitone = null;
+    _ticker?.cancel();
+    _ticker = null;
+    _nextMystery();
+    notifyListeners();
+  }
+
+  void _nextMystery() {
+    final pool = settings.noteSet.toList();
+    judged.add(JudgedEvent(NoteEvent(
+        startBeat: judged.length.toDouble(),
+        durationBeats: 1,
+        pitch: Pitch(pool[_rng.nextInt(pool.length)]))));
     ppReplaysLeft = switch (settings.difficulty) {
       Difficulty.beginner => -1,
       Difficulty.easy => 2,
       Difficulty.standard || Difficulty.custom => 1,
       Difficulty.hard => 0,
     };
-    phase = Phase.performing;
-    activeBeat = null;
-    flashSemitone = null;
-    _ticker?.cancel();
-    _ticker = null;
     _playMystery();
-    notifyListeners();
   }
 
   void _playMystery() {
-    final target = judged[ppIndex].event.pitch!;
+    final target = judged.last.event.pitch!;
     engine.scheduleNote(
         target.frequency, settings.tone, engine.now + 0.15, 0.9);
   }
 
   void ppHearAgain() {
-    if (!ppRoundActive || ppReplaysLeft == 0) return;
+    if (!ppStreaming ||
+        ppReplaysLeft == 0 ||
+        judged.last.verdict != Verdict.pending) {
+      return;
+    }
     if (ppReplaysLeft > 0) ppReplaysLeft--;
     _playMystery();
     notifyListeners();
   }
 
   void _ppAnswer(Pitch played) {
-    final j = judged[ppIndex];
+    final j = judged.last;
     final target = j.event.pitch!;
     j.played = played;
     j.revealed = true;
-    j.verdict = played == target ? Verdict.good : Verdict.wrongPitch;
+    final good = played == target;
+    j.verdict = good ? Verdict.good : Verdict.wrongPitch;
     flashSemitone = played.semitone;
     flashVerdict = j.verdict;
     _flashTimer?.cancel();
@@ -211,69 +226,66 @@ class GameController extends ChangeNotifier {
       flashVerdict = null;
       notifyListeners();
     });
-    final wrong = j.verdict != Verdict.good;
     // Each mystery note sounds exactly once — no reveal tone after a miss.
     // The staff dyad (guess in red, answer in amber) carries the correction.
-    ppFeedback = wrong
-        ? 'You played ${played.label} — it was ${target.label}.'
-        : null;
-    ppIndex++;
-    if (ppIndex >= judged.length) {
-      _finishPP();
-      return;
-    }
+    ppFeedback = good
+        ? null
+        : 'You played ${played.label} — it was ${target.label}.';
+    ppAnswered++;
+    totalPitchEvents++;
+    if (good) totalPitchCorrect++;
+    streak = good ? streak + 1 : 0;
+    _ppBatch.add(j);
+    if (_ppBatch.length >= settings.ppNotes) _commitPPBatch();
     _ppTimer?.cancel();
-    _ppTimer = Timer(Duration(milliseconds: wrong ? 1800 : 1100), () {
-      if (!ppRoundActive) return;
-      _playMystery();
+    _ppTimer = Timer(Duration(milliseconds: good ? 1100 : 1800), () {
+      if (!ppStreaming) return;
+      _nextMystery();
       notifyListeners();
     });
   }
 
-  void _finishPP() {
+  /// Freeze the answered notes gathered so far into one session-log entry.
+  /// The log keeps Perfect Pitch results grouped in [Settings.ppNotes]-sized
+  /// sets even though gameplay streams continuously.
+  void _commitPPBatch() {
+    if (_ppBatch.isEmpty) return;
+    final correct = _ppBatch.where((j) => j.verdict == Verdict.good).length;
+    roundLog.insert(
+      0,
+      RoundLogEntry(
+        number: roundLog.length + 1,
+        won: correct == _ppBatch.length,
+        perfectPitch: true,
+        notes: [
+          for (final j in _ppBatch)
+            LoggedNote(
+              target: j.event.pitch!.label,
+              verdict: j.verdict,
+              played: j.played?.label,
+            ),
+        ],
+        pitchCorrect: correct,
+        // Timing is meaningless here; mirror pitch so the log line reads
+        // sensibly, but leave the timed totals untouched.
+        onTime: correct,
+        pitchTotal: _ppBatch.length,
+      ),
+    );
+    _ppBatch.clear();
+  }
+
+  /// End the stream. The unanswered mystery note is dropped — stopping is
+  /// not a wrong answer — and any partial batch goes to the log.
+  void stopPP() {
+    if (!ppStreaming) return;
     _ppTimer?.cancel();
     _ppTimer = null;
-    var allGood = true;
-    roundPitchCorrect = 0;
-    for (final j in judged) {
-      if (j.verdict == Verdict.pending) j.verdict = Verdict.missed;
-      j.revealed = true;
-      if (j.verdict == Verdict.good) {
-        roundPitchCorrect++;
-      } else {
-        allGood = false;
-      }
+    if (judged.isNotEmpty && judged.last.verdict == Verdict.pending) {
+      judged.removeLast();
     }
-    // Timing is meaningless here; mirror pitch so shared summary UI reads
-    // sensibly, but leave the timed totals untouched.
-    roundOnTime = roundPitchCorrect;
-    totalPitchEvents += roundPitchTotal;
-    totalPitchCorrect += roundPitchCorrect;
-    streak = allGood && roundPitchTotal > 0 ? streak + 1 : 0;
-
-    if (!lastRoundSkipped && roundPitchTotal > 0) {
-      roundLog.insert(
-        0,
-        RoundLogEntry(
-          number: roundLog.length + 1,
-          won: allGood,
-          perfectPitch: true,
-          notes: [
-            for (final j in judged)
-              LoggedNote(
-                target: j.event.pitch!.label,
-                verdict: j.verdict,
-                played: j.played?.label,
-              ),
-          ],
-          pitchCorrect: roundPitchCorrect,
-          onTime: roundOnTime,
-          pitchTotal: roundPitchTotal,
-        ),
-      );
-    }
-
-    phase = Phase.summary;
+    _commitPPBatch();
+    phase = Phase.idle;
     notifyListeners();
   }
 
@@ -440,6 +452,9 @@ class GameController extends ChangeNotifier {
     if (_held.containsKey(semitone)) return; // key auto-repeat / double press
     if (!settings.noteSet.contains(semitone)) return;
     if (!freePlay && !keysActive) return;
+    // Between mystery notes the keys stay silent — a free tone there would
+    // be a reference pitch, which Perfect Pitch forbids.
+    if (ppStreaming && judged.last.verdict != Verdict.pending) return;
     engine.unlock();
     final pitch = Pitch(semitone);
     _held[semitone] = engine.startNote(pitch.frequency, settings.tone);
@@ -448,7 +463,7 @@ class GameController extends ChangeNotifier {
       if (echo.length >= settings.measures * 4) echo.clear();
       echo.add(pitch);
     } else if (perfectPitch) {
-      if (ppRoundActive) _ppAnswer(pitch);
+      if (ppStreaming) _ppAnswer(pitch);
     } else {
       final judging = phase == Phase.performing ||
           (phase == Phase.userCount && _pos >= _userStart - 0.9);
@@ -469,6 +484,7 @@ class GameController extends ChangeNotifier {
   void setMode(GameMode value) {
     if (mode == value) return;
     _clearPause();
+    if (ppStreaming) stopPP(); // commits any partial batch to the log
     mode = value;
     _ticker?.cancel();
     _ticker = null;
@@ -481,7 +497,8 @@ class GameController extends ChangeNotifier {
     judged = [];
     melody = null;
     ppFeedback = null;
-    ppIndex = 0;
+    ppAnswered = 0;
+    streak = 0; // means per-round in training, per-note in Perfect Pitch
     activeBeat = null;
     flashSemitone = null;
     notifyListeners();
@@ -562,6 +579,9 @@ class GameController extends ChangeNotifier {
 
   void updateSettings(Settings next) {
     if (phase.isActiveRound) return;
+    if (next.tone != settings.tone) {
+      engine.preload(next.tone); // fire-and-forget; sampled tones only
+    }
     settings = next;
     notifyListeners();
   }

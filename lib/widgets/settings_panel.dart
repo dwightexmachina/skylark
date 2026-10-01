@@ -90,14 +90,14 @@ class _SettingsPanelState extends State<SettingsPanel> {
                     ? '${s.noteSet.length} of $semitoneCount selected — the real difficulty dial. At least 2 required.'
                     : '${s.noteSet.length} of $semitoneCount selected. At least 2 required.'),
             const SizedBox(height: 20),
-            _head(p, c.perfectPitch ? 'Notes per round' : 'Length'),
+            _head(p, c.perfectPitch ? 'Log grouping' : 'Length'),
             const SizedBox(height: 8),
             _stepper(p, c),
             const SizedBox(height: 6),
             _sub(
                 p,
                 c.perfectPitch
-                    ? 'Mystery notes per round (1–10).'
+                    ? 'The Log groups your results into sets of this many notes (1–10).'
                     : 'Measures per round (1–4), in 4/4.'),
             const SizedBox(height: 20),
             if (c.perfectPitch)
@@ -181,16 +181,13 @@ class _SettingsPanelState extends State<SettingsPanel> {
               const SizedBox(height: 18),
               _head(p, 'Tone'),
               const SizedBox(height: 8),
-              _segmented<Tone>(
-                p,
-                values: Tone.values,
-                selected: s.tone,
-                label: (t) => t.label,
-                onTap: (t) => c.updateSettings(s.copyWith(tone: t)),
-              ),
+              _toneChips(p, c),
               const SizedBox(height: 6),
               _sub(p,
-                  'Pure = sine · Warm = triangle · Organ = layered harmonics. Recognizing pitch across timbres is the real test.'),
+                  'Pure = sine · Warm = triangle · Organ = layered harmonics. Salamander and FluidR3 are sampled grand pianos — recognizing pitch across timbres is the real test.'),
+              const SizedBox(height: 4),
+              _sub(p,
+                  'Salamander Grand Piano by Alexander Holm (CC-BY 3.0).'),
             ] else ...[
               const SizedBox(height: 18),
               _head(p, 'Rhythm vocabulary'),
@@ -245,16 +242,13 @@ class _SettingsPanelState extends State<SettingsPanel> {
               const SizedBox(height: 18),
               _head(p, 'Tone'),
               const SizedBox(height: 8),
-              _segmented<Tone>(
-                p,
-                values: Tone.values,
-                selected: s.tone,
-                label: (t) => t.label,
-                onTap: (t) => c.updateSettings(s.copyWith(tone: t)),
-              ),
+              _toneChips(p, c),
               const SizedBox(height: 6),
               _sub(p,
-                  'Pure = sine · Warm = triangle · Organ = layered harmonics.'),
+                  'Pure = sine · Warm = triangle · Organ = layered harmonics. Salamander and FluidR3 are sampled grand pianos.'),
+              const SizedBox(height: 4),
+              _sub(p,
+                  'Salamander Grand Piano by Alexander Holm (CC-BY 3.0).'),
             ],
           ],
         ),
@@ -343,6 +337,46 @@ class _SettingsPanelState extends State<SettingsPanel> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Tone picker as wrapping chips: a segmented row can't fit five options.
+  Widget _toneChips(Palette p, GameController c) {
+    final s = c.settings;
+    return Wrap(
+      spacing: 7,
+      runSpacing: 7,
+      children: [
+        for (final t in Tone.values)
+          InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: () => c.updateSettings(s.copyWith(tone: t)),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: t == s.tone ? p.accent : p.surface,
+                border: Border.all(
+                    color: t == s.tone ? p.accentShadow : p.line, width: 2),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: t == s.tone
+                    ? [
+                        BoxShadow(
+                            color: p.accentShadow, offset: const Offset(0, 2))
+                      ]
+                    : null,
+              ),
+              child: Text(
+                t.label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: t == s.tone ? p.onAccent : p.muted,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 

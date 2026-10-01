@@ -1,3 +1,4 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:web/web.dart' as web;
 
@@ -13,91 +14,140 @@ GameController freshController() {
   return c;
 }
 
+/// Answer the current mystery note, then let the next one arrive.
+void answer(FakeAsync async, GameController c, int semitone) {
+  c.noteOn(semitone);
+  c.noteOff(semitone);
+  async.elapse(const Duration(milliseconds: 2000));
+}
+
 void main() {
-  test('a PP round asks ppNotes mysteries drawn from the note set', () {
-    final c = freshController();
-    c.updateSettings(c.settings.copyWith(ppNotes: 4));
-    c.playRound();
-    expect(c.phase, Phase.performing);
-    expect(c.judged.length, 4);
-    for (final j in c.judged) {
+  test('the stream serves one mystery note at a time from the note set', () {
+    fakeAsync((async) {
+      final c = freshController();
+      c.playRound();
+      expect(c.phase, Phase.performing);
+      expect(c.judged.length, 1);
+      final j = c.judged.single;
       expect(c.settings.noteSet.contains(j.event.pitch!.semitone), isTrue);
       expect(j.revealed, isFalse);
-    }
-    expect(c.ppReplaysLeft, -1); // beginner: unlimited
+      expect(c.ppReplaysLeft, -1); // beginner: unlimited
+    });
   });
 
-  test('answering every note right wins, logs a PP entry, bumps streak', () {
-    final c = freshController();
-    c.updateSettings(c.settings.copyWith(ppNotes: 3));
-    c.playRound();
-    final targets = [for (final j in c.judged) j.event.pitch!.semitone];
-    for (final t in targets) {
+  test('right answers bump the per-note streak and batch into the log', () {
+    fakeAsync((async) {
+      final c = freshController();
+      c.updateSettings(c.settings.copyWith(ppNotes: 3));
+      c.playRound();
+      for (var i = 0; i < 3; i++) {
+        answer(async, c, c.judged.last.event.pitch!.semitone);
+      }
+      // The stream keeps going — a new pending note, no summary.
+      expect(c.phase, Phase.performing);
+      expect(c.judged.last.verdict, Verdict.pending);
+      expect(c.streak, 3);
+      expect(c.ppAnswered, 3);
+      expect(c.roundLog.length, 1);
+      final e = c.roundLog.first;
+      expect(e.perfectPitch, isTrue);
+      expect(e.won, isTrue);
+      expect(e.notes.length, 3);
+      // Timing totals stay untouched by Perfect Pitch.
+      expect(c.totalTimedEvents, 0);
+      expect(c.totalPitchEvents, 3);
+      c.dispose();
+    });
+  });
+
+  test('a wrong answer records what was played and resets the streak', () {
+    fakeAsync((async) {
+      final c = freshController();
+      c.updateSettings(c.settings.copyWith(ppNotes: 2));
+      c.playRound();
+      answer(async, c, c.judged.last.event.pitch!.semitone);
+      expect(c.streak, 1);
+      final t = c.judged.last.event.pitch!.semitone;
+      final wrong = c.settings.noteSet.firstWhere((s) => s != t);
+      answer(async, c, wrong);
+      final judged = c.judged[1];
+      expect(judged.verdict, Verdict.wrongPitch);
+      expect(judged.played, Pitch(wrong));
+      expect(c.ppFeedback, contains('it was'));
+      expect(c.streak, 0);
+      expect(c.roundLog.single.won, isFalse);
+      c.dispose();
+    });
+  });
+
+  test('keys stay silent between mystery notes', () {
+    fakeAsync((async) {
+      final c = freshController();
+      c.playRound();
+      final t = c.judged.last.event.pitch!.semitone;
       c.noteOn(t);
       c.noteOff(t);
-    }
-    expect(c.phase, Phase.summary);
-    expect(c.roundPitchCorrect, 3);
-    expect(c.streak, 1);
-    expect(c.roundLog.length, 1);
-    final e = c.roundLog.first;
-    expect(e.perfectPitch, isTrue);
-    expect(e.won, isTrue);
-    expect(e.notes.length, 3);
-    // Timing totals stay untouched by PP rounds.
-    expect(c.totalTimedEvents, 0);
-    expect(c.totalPitchEvents, 3);
-  });
-
-  test('a wrong answer records what was played and sets the teaching line',
-      () {
-    final c = freshController();
-    c.updateSettings(c.settings.copyWith(ppNotes: 2));
-    c.playRound();
-    final t0 = c.judged[0].event.pitch!.semitone;
-    // Deliberately answer with a different in-set note.
-    final wrong =
-        c.settings.noteSet.firstWhere((s) => s != t0, orElse: () => t0);
-    c.noteOn(wrong);
-    c.noteOff(wrong);
-    if (wrong != t0) {
-      expect(c.judged[0].verdict, Verdict.wrongPitch);
-      expect(c.judged[0].played, Pitch(wrong));
-      expect(c.ppFeedback, contains('it was'));
-    }
-    // Answer the second note correctly and finish.
-    final t1 = c.judged[1].event.pitch!.semitone;
-    c.noteOn(t1);
-    c.noteOff(t1);
-    expect(c.phase, Phase.summary);
-    expect(c.roundLog.first.won, wrong == t0);
+      // Before the next note arrives, presses neither sound nor judge.
+      c.noteOn(t);
+      expect(c.heldSemitones, isEmpty);
+      expect(c.ppAnswered, 1);
+      c.dispose();
+    });
   });
 
   test('replay budget follows difficulty and hard means none', () {
-    final c = freshController();
-    c.updateSettings(c.settings
-        .withDifficulty(Difficulty.hard)
-        .copyWith(ppNotes: 2));
-    c.playRound();
-    expect(c.ppReplaysLeft, 0);
-    c.ppHearAgain(); // must be a no-op
-    expect(c.ppReplaysLeft, 0);
+    fakeAsync((async) {
+      final c = freshController();
+      c.updateSettings(c.settings.withDifficulty(Difficulty.hard));
+      c.playRound();
+      expect(c.ppReplaysLeft, 0);
+      c.ppHearAgain(); // must be a no-op
+      expect(c.ppReplaysLeft, 0);
+      c.dispose();
+    });
   });
 
-  test('skipped PP rounds do not reach the log', () {
-    final c = freshController();
-    c.playRound();
-    c.skip();
-    expect(c.phase, Phase.summary);
-    expect(c.roundLog, isEmpty);
+  test('stopping mid-batch logs the partial set, drops the pending note', () {
+    fakeAsync((async) {
+      final c = freshController();
+      c.updateSettings(c.settings.copyWith(ppNotes: 5));
+      c.playRound();
+      answer(async, c, c.judged.last.event.pitch!.semitone);
+      answer(async, c, c.judged.last.event.pitch!.semitone);
+      c.stopPP();
+      expect(c.phase, Phase.idle);
+      expect(c.judged.length, 2); // unanswered note gone, no miss penalty
+      expect(c.streak, 2);
+      final e = c.roundLog.single;
+      expect(e.pitchTotal, 2);
+      expect(e.won, isTrue);
+      c.dispose();
+    });
   });
 
-  test('switching modes resets the board', () {
-    final c = freshController();
-    c.playRound();
-    c.setMode(GameMode.training);
-    expect(c.phase, Phase.idle);
-    expect(c.judged, isEmpty);
-    expect(c.perfectPitch, isFalse);
+  test('stopping with nothing answered logs nothing', () {
+    fakeAsync((async) {
+      final c = freshController();
+      c.playRound();
+      c.stopPP();
+      expect(c.phase, Phase.idle);
+      expect(c.roundLog, isEmpty);
+      c.dispose();
+    });
+  });
+
+  test('switching modes commits the partial batch and resets the board', () {
+    fakeAsync((async) {
+      final c = freshController();
+      c.playRound();
+      answer(async, c, c.judged.last.event.pitch!.semitone);
+      c.setMode(GameMode.training);
+      expect(c.phase, Phase.idle);
+      expect(c.judged, isEmpty);
+      expect(c.perfectPitch, isFalse);
+      expect(c.streak, 0);
+      expect(c.roundLog.single.pitchTotal, 1);
+      c.dispose();
+    });
   });
 }

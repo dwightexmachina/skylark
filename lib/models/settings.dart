@@ -38,14 +38,14 @@ class Settings {
   final bool allowRests;
 
   const Settings({
-    this.noteSet = const {0, 2, 4, 5, 7}, // C D E F G
+    this.noteSet = const {0, 2, 4, 5, 7, 12}, // C D E F G + C5
     this.measures = 1,
     this.ppNotes = 5,
     this.bpm = 80,
     this.window = TimingWindow.loose, // matches the Beginner default
 
     this.tonicFirst = true,
-    this.tone = Tone.warm,
+    this.tone = Tone.salamander,
     this.difficulty = Difficulty.beginner,
     this.allowHalves = false,
     this.allowEighths = false,

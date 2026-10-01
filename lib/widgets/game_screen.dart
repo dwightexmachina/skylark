@@ -519,6 +519,26 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  /// Perfect Pitch shows the tail of the stream: the last few notes,
+  /// re-based to beat 0, so older notes slide off to the left as new ones
+  /// arrive. Two measures' worth always fits the staff without scrolling.
+  static const _ppWindowNotes = 8;
+
+  List<JudgedEvent> _ppWindow(List<JudgedEvent> judged) {
+    final start =
+        judged.length <= _ppWindowNotes ? 0 : judged.length - _ppWindowNotes;
+    return [
+      for (var i = start; i < judged.length; i++)
+        JudgedEvent(NoteEvent(
+            startBeat: (i - start).toDouble(),
+            durationBeats: 1,
+            pitch: judged[i].event.pitch))
+          ..verdict = judged[i].verdict
+          ..played = judged[i].played
+          ..revealed = judged[i].revealed,
+    ];
+  }
+
   Widget _stage(Palette p) {
     final c = controller;
     final display = c.freePlay
@@ -530,7 +550,9 @@ class _GameScreenState extends State<GameScreen> {
                   pitch: c.echo[i]))
                 ..revealed = true,
           ]
-        : c.judged;
+        : c.perfectPitch
+            ? _ppWindow(c.judged)
+            : c.judged;
     return Padding(
       padding: const EdgeInsets.fromLTRB(26, 6, 24, 30),
       child: Column(
@@ -567,7 +589,7 @@ class _GameScreenState extends State<GameScreen> {
                   child: StaffView(
                     judged: display,
                     measures: c.perfectPitch
-                        ? ((display.length + 3) ~/ 4).clamp(1, 4)
+                        ? ((display.length + 3) ~/ 4).clamp(1, 2)
                         : c.melody?.measures ?? c.settings.measures,
                     playheadBeat: c.playheadBeat,
                     secondsPerBeat: c.secondsPerBeat,
@@ -581,7 +603,9 @@ class _GameScreenState extends State<GameScreen> {
           const SizedBox(height: 10),
           // The verdict legend appears once notes are actually being judged.
           if (!c.freePlay &&
-              (c.phase == Phase.performing || c.phase == Phase.summary)) ...[
+              (c.phase == Phase.performing ||
+                  c.phase == Phase.summary ||
+                  (c.perfectPitch && c.judged.isNotEmpty))) ...[
             _legend(p),
             const SizedBox(height: 18),
           ] else
@@ -612,7 +636,7 @@ class _GameScreenState extends State<GameScreen> {
                 if (sub != null)
                   Text(sub,
                       style: TextStyle(fontSize: 12.5, color: p.muted)),
-                if (c.ppRoundActive) ...[
+                if (c.ppStreaming) ...[
                   const SizedBox(height: 10),
                   _hearAgain(p),
                 ],
@@ -621,7 +645,14 @@ class _GameScreenState extends State<GameScreen> {
           ),
           const SizedBox(width: 16),
           if (c.perfectPitch)
-            _ppDots(p)
+            Text(
+                switch (c.ppAnswered) {
+                  0 => '',
+                  1 => '♪ 1 note',
+                  final n => '♪ $n notes',
+                },
+                style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w700, color: p.muted))
           else
             Row(children: [
               for (var b = 0; b < 4; b++)
@@ -647,34 +678,6 @@ class _GameScreenState extends State<GameScreen> {
         ],
       ),
     );
-  }
-
-  /// Progress dots for a Perfect Pitch round: one per mystery note.
-  Widget _ppDots(Palette p) {
-    final c = controller;
-    final n = c.judged.length;
-    if (n == 0) return const SizedBox.shrink();
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      for (var i = 0; i < n; i++)
-        Container(
-          width: 13,
-          height: 13,
-          margin: const EdgeInsets.only(left: 7),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: switch (c.judged[i].verdict) {
-              Verdict.good => p.good,
-              Verdict.wrongPitch || Verdict.missed => p.bad,
-              _ => (c.ppRoundActive && i == c.ppIndex) ? p.accent : p.soft,
-            },
-            boxShadow: (c.ppRoundActive &&
-                    i == c.ppIndex &&
-                    c.judged[i].verdict == Verdict.pending)
-                ? [BoxShadow(color: p.accentSoft, spreadRadius: 4)]
-                : null,
-          ),
-        ),
-    ]);
   }
 
   Widget _hearAgain(Palette p) {
@@ -726,25 +729,17 @@ class _GameScreenState extends State<GameScreen> {
       );
     }
     if (c.perfectPitch) {
-      switch (c.phase) {
-        case Phase.performing:
-          return (
-            'Note ${c.ppIndex + 1} of ${c.judged.length} — what do you hear?',
-            'No tonic, no pulse. Press the key you think it is — your first press counts.'
-          );
-        case Phase.summary:
-          return (
-            'Round ${c.roundNumber}: ${c.roundPitchCorrect}/${c.roundPitchTotal} identified',
-            c.streak > 0
-                ? 'Perfect — streak ${c.streak}! Press Next round to keep it going.'
-                : 'Press Next round to try another set.'
-          );
-        default:
-          return (
-            'Ready when you are',
-            'Press Play round — ${c.settings.ppNotes} mystery notes await. No tonic, no pulse.'
-          );
+      if (c.phase == Phase.performing) {
+        return (
+          c.streak > 1 ? 'What do you hear? — streak ${c.streak}'
+              : 'What do you hear?',
+          'No tonic, no pulse. Press the key you think it is — your first press counts.'
+        );
       }
+      return (
+        'Ready when you are',
+        'Press Start for a stream of mystery notes. No tonic, no pulse — stop whenever you like.'
+      );
     }
     final measures = c.melody?.measures ?? c.settings.measures;
     switch (c.phase) {
@@ -799,6 +794,23 @@ class _GameScreenState extends State<GameScreen> {
       );
     }
     final active = c.phase.isActiveRound;
+    if (c.perfectPitch) {
+      return Wrap(
+        spacing: 12,
+        runSpacing: 10,
+        children: [
+          KeyedSubtree(
+            key: _playKey,
+            child: _button(
+              p,
+              active ? '■  Stop' : '▶  Start',
+              primary: !active,
+              onTap: active ? c.stopPP : c.playRound,
+            ),
+          ),
+        ],
+      );
+    }
     return Wrap(
       spacing: 12,
       runSpacing: 10,
@@ -812,7 +824,7 @@ class _GameScreenState extends State<GameScreen> {
             onTap: active ? null : c.playRound,
           ),
         ),
-        if (active && !c.perfectPitch)
+        if (active)
           _button(p, c.paused ? '▶  Resume' : '❚❚  Pause',
               blue: !c.paused, primary: c.paused, onTap: c.togglePause),
         if (c.melody != null && !active)
