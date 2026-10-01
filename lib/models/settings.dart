@@ -21,6 +21,27 @@ enum Difficulty {
   const Difficulty(this.label);
 }
 
+enum FocusIntensity {
+  low('Low', 0.4),
+  medium('Medium', 0.6),
+  high('High', 0.8);
+
+  final String label;
+  final double weight; // combined probability mass given to the focus pair
+  const FocusIntensity(this.label, this.weight);
+}
+
+enum ReplayBudget {
+  unlimited('∞', -1),
+  two('2', 2),
+  one('1', 1),
+  none('None', 0);
+
+  final String label;
+  final int count;
+  const ReplayBudget(this.label, this.count);
+}
+
 class Settings {
   /// Selected notes as semitones from C4 (0–12; 12 = C5).
   final Set<int> noteSet;
@@ -37,6 +58,12 @@ class Settings {
   final bool allowEighths;
   final bool allowRests;
 
+  /// Pair Drill: the two notes to emphasize (0, 1, or 2 of them — a round
+  /// can only start once exactly two are chosen, both must be enabled).
+  final Set<int> focusPair;
+  final FocusIntensity focusIntensity;
+  final ReplayBudget pairReplays;
+
   const Settings({
     this.noteSet = const {0, 2, 4, 5, 7, 12}, // C D E F G + C5
     this.measures = 1,
@@ -50,6 +77,9 @@ class Settings {
     this.allowHalves = false,
     this.allowEighths = false,
     this.allowRests = false,
+    this.focusPair = const {},
+    this.focusIntensity = FocusIntensity.medium,
+    this.pairReplays = ReplayBudget.one,
   });
 
   Settings copyWith({
@@ -64,6 +94,9 @@ class Settings {
     bool? allowHalves,
     bool? allowEighths,
     bool? allowRests,
+    Set<int>? focusPair,
+    FocusIntensity? focusIntensity,
+    ReplayBudget? pairReplays,
   }) {
     return Settings(
       noteSet: noteSet ?? this.noteSet,
@@ -77,6 +110,9 @@ class Settings {
       allowHalves: allowHalves ?? this.allowHalves,
       allowEighths: allowEighths ?? this.allowEighths,
       allowRests: allowRests ?? this.allowRests,
+      focusPair: focusPair ?? this.focusPair,
+      focusIntensity: focusIntensity ?? this.focusIntensity,
+      pairReplays: pairReplays ?? this.pairReplays,
     );
   }
 

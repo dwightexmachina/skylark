@@ -39,6 +39,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
                     letterSpacing: 0.8,
                     color: p.ink)),
             const SizedBox(height: 18),
+            if (c.pairDrill)
+              ..._pairDrillSections(p, c, s)
+            else ...[
             _head(p, 'Difficulty'),
             const SizedBox(height: 8),
             _segmented<Difficulty>(
@@ -228,6 +231,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                   'Each round opens with C4 as a reference before the count-in.'),
             ],
             ],
+            ],
             const SizedBox(height: 16),
             _sub(p,
                 'Sounds: Salamander Grand Piano by Alexander Holm (CC-BY 3.0) · FluidR3 soundfont (MIT).'),
@@ -235,6 +239,133 @@ class _SettingsPanelState extends State<SettingsPanel> {
         ),
       ),
     );
+  }
+
+  /// Pair Drill's whole sidebar: deliberately separate from the
+  /// Training/Perfect Pitch block above — its settings share nothing with
+  /// either (no difficulty preset, no tempo, a live pair picker instead).
+  List<Widget> _pairDrillSections(Palette p, GameController c, Settings s) {
+    return [
+      _head(p, 'Notes in play'),
+      const SizedBox(height: 8),
+      _noteChips(p, c),
+      const SizedBox(height: 6),
+      _sub(p,
+          '${s.noteSet.length} of $semitoneCount selected. At least 3 required for Pair Drill, so there\'s always a decoy.'),
+      const SizedBox(height: 20),
+      _head(p, 'Choose your pair'),
+      const SizedBox(height: 8),
+      _pairPicker(p, c),
+      const SizedBox(height: 8),
+      _pairStatus(p, c),
+      const SizedBox(height: 6),
+      _sub(p,
+          'One button per note enabled above — tap any two to select them, tap a selected one again to drop it. These two come up most often, but never directly next to each other.'),
+      const SizedBox(height: 20),
+      _head(p, 'Focus intensity'),
+      const SizedBox(height: 8),
+      _segmented<FocusIntensity>(
+        p,
+        values: FocusIntensity.values,
+        selected: s.focusIntensity,
+        label: (f) => f.label,
+        onTap: (f) => c.updateSettings(s.copyWith(focusIntensity: f)),
+      ),
+      const SizedBox(height: 6),
+      _sub(p,
+          '${s.focusIntensity.label} — about ${(s.focusIntensity.weight * 10).round()} in 10 notes played are your focus pair.'),
+      const SizedBox(height: 20),
+      _head(p, 'Replays'),
+      const SizedBox(height: 8),
+      _segmented<ReplayBudget>(
+        p,
+        values: ReplayBudget.values,
+        selected: s.pairReplays,
+        label: (r) => r.label,
+        onTap: (r) => c.updateSettings(s.copyWith(pairReplays: r)),
+      ),
+      const SizedBox(height: 6),
+      _sub(p, switch (s.pairReplays) {
+        ReplayBudget.unlimited => 'Replay the mystery note as often as you like.',
+        ReplayBudget.two => 'Two replays per mystery note.',
+        ReplayBudget.one => 'One replay per mystery note.',
+        ReplayBudget.none => 'One listen only — no replays.',
+      }),
+      const SizedBox(height: 20),
+      _head(p, 'Log grouping'),
+      const SizedBox(height: 8),
+      _stepper(p, c),
+      const SizedBox(height: 6),
+      _sub(p, 'The Log groups your results into sets of this many notes (1–10).'),
+    ];
+  }
+
+  /// One button per currently-enabled note — the set shrinks and grows
+  /// live as "Notes in play" changes, rather than snapshotting a picker.
+  Widget _pairPicker(Palette p, GameController c) {
+    final notes = c.settings.noteSet.toList()..sort();
+    return Wrap(
+      spacing: 7,
+      runSpacing: 7,
+      children: [for (final semitone in notes) _pairPill(p, c, semitone)],
+    );
+  }
+
+  Widget _pairPill(Palette p, GameController c, int semitone) {
+    final focus = c.settings.focusPair;
+    final selected = focus.contains(semitone);
+    final locked = !selected && focus.length >= 2;
+    final bg = selected ? p.tonicSoft : p.surface;
+    final border = selected ? p.tonic : p.line;
+    final fg = selected ? p.tonic : p.muted;
+    return Opacity(
+      opacity: locked ? 0.45 : 1,
+      child: InkWell(
+        onTap: locked ? null : () => c.toggleFocusPair(semitone),
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+          decoration: BoxDecoration(
+            color: bg,
+            border: Border.all(color: border, width: 2),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            semitone < 12 ? pitchClassLabels[semitone] : Pitch(semitone).label,
+            style: TextStyle(
+                fontSize: 12.5, fontWeight: FontWeight.w700, color: fg),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pairStatus(Palette p, GameController c) {
+    final focus = c.settings.focusPair;
+    if (focus.length == 2) {
+      final labels = focus.map((s) => Pitch(s).label).join(' and ');
+      return Row(children: [
+        Icon(Icons.check_circle, size: 15, color: p.good),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text('$labels — ready to play',
+              style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w700, color: p.good)),
+        ),
+      ]);
+    }
+    final msg = focus.isEmpty
+        ? 'Pick two notes you mix up — exactly two required'
+        : 'Pick one more note — exactly two required';
+    return Row(children: [
+      Icon(Icons.circle, size: 9, color: p.warn),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(msg,
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w700, color: p.warn)),
+      ),
+    ]);
   }
 
   Widget _head(Palette p, String text) => Text(text,
@@ -323,7 +454,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
 
   Widget _stepper(Palette p, GameController c) {
     final s = c.settings;
-    final pp = c.perfectPitch;
+    final pp = c.perfectPitch || c.pairDrill;
     final value = pp ? s.ppNotes : s.measures;
     final min = 1, max = pp ? 10 : 4;
     void set(int v) => c.updateSettings(

@@ -28,23 +28,30 @@ class RoundLogEntry {
   final int number; // 1-based, in the order rounds were completed
   final bool won; // perfect round: every note right and on time
   final bool perfectPitch; // true when this was a Perfect Pitch round
+  final bool pairDrill; // true when this was a Pair Drill round
+  final List<String> focusPairLabels; // Pair Drill: e.g. ['E4', 'F4']
   final List<LoggedNote> notes;
   final int pitchCorrect, onTime, pitchTotal;
+  final int pairCorrect, pairTotal; // Pair Drill: accuracy on the pair only
   const RoundLogEntry({
     required this.number,
     required this.won,
     this.perfectPitch = false,
+    this.pairDrill = false,
+    this.focusPairLabels = const [],
     required this.notes,
     required this.pitchCorrect,
     required this.onTime,
     required this.pitchTotal,
+    this.pairCorrect = 0,
+    this.pairTotal = 0,
   });
 }
 
 enum Phase { idle, tonic, countIn, listening, userCount, performing, summary }
 
-/// The three ways to use Skylark.
-enum GameMode { training, perfectPitch, freePlay }
+/// The four ways to use Skylark.
+enum GameMode { training, perfectPitch, freePlay, pairDrill }
 
 /// Which playing surface is shown: piano keys or a guitar fingerboard.
 /// Purely visual — notes, computer keys, and audio are identical.
