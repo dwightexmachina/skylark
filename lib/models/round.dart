@@ -46,6 +46,10 @@ enum Phase { idle, tonic, countIn, listening, userCount, performing, summary }
 /// The three ways to use Skylark.
 enum GameMode { training, perfectPitch, freePlay }
 
+/// Which playing surface is shown: piano keys or a guitar fingerboard.
+/// Purely visual — notes, computer keys, and audio are identical.
+enum Instrument { piano, guitar }
+
 extension PhaseX on Phase {
   bool get isActiveRound =>
       this != Phase.idle && this != Phase.summary;

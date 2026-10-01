@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../audio/audio_engine.dart' show Tone;
 import '../models/note.dart';
 import '../models/round.dart';
 import '../state/game_controller.dart';
 import '../state/theme_controller.dart';
 import '../state/tutorial_controller.dart';
 import '../ui/palette.dart';
+import 'fretboard.dart';
 import 'keyboard.dart';
 import 'lark.dart';
 import 'result_pop.dart';
@@ -610,9 +612,112 @@ class _GameScreenState extends State<GameScreen> {
             const SizedBox(height: 18),
           ] else
             const SizedBox(height: 8),
-          KeyedSubtree(key: _keyboardKey, child: KeyboardView(controller: c)),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [_instrumentToggle(p), _toneQuickPicks(p)],
+          ),
+          const SizedBox(height: 12),
+          KeyedSubtree(
+            key: _keyboardKey,
+            child: c.instrument == Instrument.guitar
+                ? FretboardView(controller: c)
+                : KeyboardView(controller: c),
+          ),
         ],
       ),
+    );
+  }
+
+  /// Piano / Guitar switch for the playing surface. Visual only: the
+  /// notes, computer keys, and audio are identical on both.
+  Widget _instrumentToggle(Palette p) {
+    final c = controller;
+    Widget chip(String label, Instrument v) => InkWell(
+          onTap: () => c.setInstrument(v),
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+            decoration: BoxDecoration(
+              color: c.instrument == v ? p.accent : Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: c.instrument == v
+                  ? [BoxShadow(color: p.accentShadow, offset: const Offset(0, 2))]
+                  : null,
+            ),
+            child: Text(label,
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: c.instrument == v ? p.onAccent : p.muted)),
+          ),
+        );
+    return Container(
+      decoration: BoxDecoration(
+        color: p.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(color: p.cardShadow, offset: const Offset(0, 3)),
+        ],
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        chip('Piano', Instrument.piano),
+        chip('Guitar', Instrument.guitar),
+      ]),
+    );
+  }
+
+  /// The selected instrument's tones as one-tap chips. Synth waves stay
+  /// under More settings; these are the sampled sounds per instrument.
+  Widget _toneQuickPicks(Palette p) {
+    final c = controller;
+    final tones = c.instrument == Instrument.guitar
+        ? const [Tone.guitarClean, Tone.guitarOverdrive, Tone.guitarDistortion]
+        : const [Tone.salamander, Tone.fluid];
+    String short(Tone t) => switch (t) {
+          Tone.guitarClean => 'Clean',
+          Tone.guitarOverdrive => 'Overdrive',
+          Tone.guitarDistortion => 'Distortion',
+          _ => t.label,
+        };
+    return Wrap(
+      spacing: 7,
+      runSpacing: 7,
+      children: [
+        for (final t in tones)
+          InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: () => c.updateSettings(c.settings.copyWith(tone: t)),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+              decoration: BoxDecoration(
+                color: t == c.settings.tone
+                    ? p.accent
+                    : p.surface.withValues(alpha: 0.72),
+                border: Border.all(
+                    color: t == c.settings.tone ? p.accentShadow : p.line,
+                    width: 2),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                      color: t == c.settings.tone
+                          ? p.accentShadow
+                          : p.cardShadow,
+                      offset: const Offset(0, 2)),
+                ],
+              ),
+              child: Text(short(t),
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color:
+                          t == c.settings.tone ? p.onAccent : p.muted)),
+            ),
+          ),
+      ],
     );
   }
 

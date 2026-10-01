@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../audio/audio_engine.dart';
 import '../models/note.dart';
 import '../models/round.dart';
 import '../models/settings.dart';
@@ -139,7 +138,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
             _sub(p, '♩ = ${s.bpm} BPM (40–140)'),
             ],
             const SizedBox(height: 20),
-            // ------------------------------------------------ More settings
+            // ---------- More settings (Perfect Pitch has none: no rhythm,
+            // no timing, no tonic — and tones live next to the instrument).
+            if (!c.perfectPitch) ...[
             InkWell(
               onTap: () => setState(() => _moreOpen = !_moreOpen),
               borderRadius: BorderRadius.circular(14),
@@ -172,22 +173,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
             ),
             if (!_moreOpen) ...[
               const SizedBox(height: 6),
-              _sub(
-                  p,
-                  c.perfectPitch
-                      ? 'Tone — practice across timbres'
-                      : 'Rhythm vocabulary · Timing window · Play tonic first · Tone'),
-            ] else if (c.perfectPitch) ...[
-              const SizedBox(height: 18),
-              _head(p, 'Tone'),
-              const SizedBox(height: 8),
-              _toneChips(p, c),
-              const SizedBox(height: 6),
               _sub(p,
-                  'Pure = sine · Warm = triangle · Organ = layered harmonics. Salamander and FluidR3 are sampled grand pianos — recognizing pitch across timbres is the real test.'),
-              const SizedBox(height: 4),
-              _sub(p,
-                  'Salamander Grand Piano by Alexander Holm (CC-BY 3.0).'),
+                  'Rhythm vocabulary · Timing window · Play tonic first'),
             ] else ...[
               const SizedBox(height: 18),
               _head(p, 'Rhythm vocabulary'),
@@ -239,17 +226,11 @@ class _SettingsPanelState extends State<SettingsPanel> {
               ),
               _sub(p,
                   'Each round opens with C4 as a reference before the count-in.'),
-              const SizedBox(height: 18),
-              _head(p, 'Tone'),
-              const SizedBox(height: 8),
-              _toneChips(p, c),
-              const SizedBox(height: 6),
-              _sub(p,
-                  'Pure = sine · Warm = triangle · Organ = layered harmonics. Salamander and FluidR3 are sampled grand pianos.'),
-              const SizedBox(height: 4),
-              _sub(p,
-                  'Salamander Grand Piano by Alexander Holm (CC-BY 3.0).'),
             ],
+            ],
+            const SizedBox(height: 16),
+            _sub(p,
+                'Sounds: Salamander Grand Piano by Alexander Holm (CC-BY 3.0) · FluidR3 soundfont (MIT).'),
           ],
         ),
       ),
@@ -337,46 +318,6 @@ class _SettingsPanelState extends State<SettingsPanel> {
           ),
         ),
       ),
-    );
-  }
-
-  /// Tone picker as wrapping chips: a segmented row can't fit five options.
-  Widget _toneChips(Palette p, GameController c) {
-    final s = c.settings;
-    return Wrap(
-      spacing: 7,
-      runSpacing: 7,
-      children: [
-        for (final t in Tone.values)
-          InkWell(
-            borderRadius: BorderRadius.circular(999),
-            onTap: () => c.updateSettings(s.copyWith(tone: t)),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: t == s.tone ? p.accent : p.surface,
-                border: Border.all(
-                    color: t == s.tone ? p.accentShadow : p.line, width: 2),
-                borderRadius: BorderRadius.circular(999),
-                boxShadow: t == s.tone
-                    ? [
-                        BoxShadow(
-                            color: p.accentShadow, offset: const Offset(0, 2))
-                      ]
-                    : null,
-              ),
-              child: Text(
-                t.label,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: t == s.tone ? p.onAccent : p.muted,
-                ),
-              ),
-            ),
-          ),
-      ],
     );
   }
 

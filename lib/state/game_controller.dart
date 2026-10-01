@@ -70,6 +70,24 @@ class GameController extends ChangeNotifier {
 
   // Mode: training (dictation), perfect pitch, or free play.
   GameMode mode = GameMode.perfectPitch;
+
+  /// Playing surface: piano keys or guitar fingerboard. Kept coherent with
+  /// the tone: guitar tones show the fingerboard, everything else the keys.
+  Instrument instrument = Instrument.piano;
+
+  // Each instrument remembers its last tone so toggling swaps sounds too.
+  Tone _lastPianoTone = const Settings().tone;
+  Tone _lastGuitarTone = Tone.guitarClean;
+
+  void setInstrument(Instrument value) {
+    if (instrument == value) return;
+    instrument = value;
+    // Mid-round this is a no-op, like every settings change: the board
+    // swaps now, the sound at the next round.
+    updateSettings(settings.copyWith(
+        tone: value == Instrument.guitar ? _lastGuitarTone : _lastPianoTone));
+    notifyListeners();
+  }
   bool get freePlay => mode == GameMode.freePlay;
   bool get perfectPitch => mode == GameMode.perfectPitch;
   final List<Pitch> echo = []; // notes echoed onto the staff
@@ -581,6 +599,12 @@ class GameController extends ChangeNotifier {
     if (phase.isActiveRound) return;
     if (next.tone != settings.tone) {
       engine.preload(next.tone); // fire-and-forget; sampled tones only
+      instrument = next.tone.isGuitar ? Instrument.guitar : Instrument.piano;
+      if (next.tone.isGuitar) {
+        _lastGuitarTone = next.tone;
+      } else {
+        _lastPianoTone = next.tone;
+      }
     }
     settings = next;
     notifyListeners();

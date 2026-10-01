@@ -3,25 +3,36 @@ import 'dart:math' as math;
 
 import 'package:web/web.dart' as web;
 
+/// Every tone is a sampled instrument: two grand pianos and three
+/// electric guitar sounds.
 enum Tone {
-  pure('Pure'),
-  warm('Warm'),
-  organ('Organ'),
   salamander('Salamander'),
-  fluid('FluidR3');
+  fluid('FluidR3'),
+  guitarClean('Guitar (clean)'),
+  guitarOverdrive('Guitar (overdrive)'),
+  guitarDistortion('Guitar (distortion)');
 
   final String label;
   const Tone(this.label);
 
-  /// Sampled pianos play recorded buffers instead of oscillators.
-  bool get sampled => this == salamander || this == fluid;
+  /// Guitar-family tones; everything else plays on the piano keys.
+  bool get isGuitar =>
+      this == guitarClean || this == guitarOverdrive || this == guitarDistortion;
 }
 
-/// FluidR3 ships one recording per semitone, C4 through C5.
-const List<String> _fluidFiles = [
+/// Chromatic sample sets ship one recording per semitone, C4 through C5.
+const List<String> _chromaticFiles = [
   'C4', 'Db4', 'D4', 'Eb4', 'E4', 'F4',
   'Gb4', 'G4', 'Ab4', 'A4', 'Bb4', 'B4', 'C5',
 ];
+
+/// Where each chromatically-sampled tone's files live under web/.
+const Map<Tone, String> _chromaticDirs = {
+  Tone.fluid: 'piano/fluid',
+  Tone.guitarClean: 'guitar/clean',
+  Tone.guitarOverdrive: 'guitar/overdrive',
+  Tone.guitarDistortion: 'guitar/distortion',
+};
 
 /// Salamander is sampled every minor third; in-between notes are
 /// pitch-shifted from the nearest anchor via playbackRate.
@@ -105,8 +116,9 @@ class AudioEngine {
   // ----------------------------------------------------------------- samples
 
   (String, double) _sampleFor(Tone tone, int semitone) {
-    if (tone == Tone.fluid) {
-      return ('piano/fluid/${_fluidFiles[semitone]}.mp3', 1);
+    final dir = _chromaticDirs[tone];
+    if (dir != null) {
+      return ('$dir/${_chromaticFiles[semitone]}.mp3', 1);
     }
     var best = _salamanderAnchors.first;
     for (final a in _salamanderAnchors) {
@@ -136,10 +148,9 @@ class AudioEngine {
         }
       });
 
-  /// Fetch and decode a sampled tone's full C4–C5 set ahead of playing, so
-  /// the first round on a piano tone doesn't start with silent notes.
+  /// Fetch and decode a tone's full C4–C5 set ahead of playing, so the
+  /// first round on a new tone doesn't start with silent notes.
   Future<void> preload(Tone tone) async {
-    if (!tone.sampled) return;
     await Future.wait([
       for (var st = 0; st <= 12; st++)
         _load(_sampleFor(tone, st).$1).then((_) {}, onError: (_) {}),
@@ -148,50 +159,13 @@ class AudioEngine {
 
   // ------------------------------------------------------------------ voices
 
-  List<(double, double, String)> _partials(Tone tone) => switch (tone) {
-        Tone.pure => [(1.0, 1.0, 'sine')],
-        Tone.warm => [(1.0, 1.0, 'triangle')],
-        Tone.organ => [(1.0, 0.65, 'sine'), (2.0, 0.35, 'sine'), (3.0, 0.18, 'sine')],
-        Tone.salamander || Tone.fluid => throw StateError('sampled tone'),
-      };
-
+  /// Play a recorded note. The sample carries its own attack and natural
+  /// decay; only the tail is shaped so melody notes don't smear.
   Voice _spawn(double freq, Tone tone, double t0, double? duration, double peak) {
-    if (tone.sampled) return _spawnSampled(freq, tone, t0, duration, peak);
-    final g = _ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(peak, t0 + 0.015);
-    g.connect(_ctx.destination);
-    final oscs = <web.AudioScheduledSourceNode>[];
-    for (final (mult, amp, type) in _partials(tone)) {
-      final osc = _ctx.createOscillator();
-      osc.type = type;
-      osc.frequency.value = freq * mult;
-      final partGain = _ctx.createGain();
-      partGain.gain.value = amp;
-      osc.connect(partGain);
-      partGain.connect(g);
-      osc.start(t0);
-      if (duration != null) osc.stop(t0 + duration + 0.1);
-      oscs.add(osc);
-      _scheduled.add(osc);
-    }
-    if (duration != null) {
-      final end = t0 + duration;
-      final sustainEnd = (end - 0.05) > (t0 + 0.02) ? end - 0.05 : t0 + 0.02;
-      g.gain.setValueAtTime(peak, sustainEnd);
-      g.gain.exponentialRampToValueAtTime(0.0001, end + 0.05);
-    }
-    return Voice._(_ctx, g, oscs);
-  }
-
-  /// Play a recorded piano note. The sample carries its own attack and
-  /// natural decay; only the tail is shaped so melody notes don't smear.
-  Voice _spawnSampled(
-      double freq, Tone tone, double t0, double? duration, double peak) {
     final (url, rate) = _sampleFor(tone, _semitoneOf(freq));
     final g = _ctx.createGain();
-    // Samples are mastered far quieter than a raw oscillator at the same
-    // gain; scale so pianos sit at the synth tones' loudness.
+    // Callers pass oscillator-era gains (0.16 peak); samples are mastered
+    // far quieter at the same value, so scale up to a comparable loudness.
     final level = (peak * 5.5).clamp(0.0, 1.0);
     g.gain.setValueAtTime(level, t0);
     if (duration != null) {
