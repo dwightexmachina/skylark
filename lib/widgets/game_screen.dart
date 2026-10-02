@@ -312,7 +312,7 @@ class _GameScreenState extends State<GameScreen> {
   Widget _topBar(Palette p) {
     final c = controller;
     String pct(int num, int den) =>
-        den == 0 ? '—' : '${(100 * num / den).round()}%';
+        den == 0 ? '—' : '${(100 * num / den).toStringAsFixed(2)}%';
     return Padding(
       padding: const EdgeInsets.fromLTRB(26, 18, 26, 12),
       child: Row(
