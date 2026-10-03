@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../models/note.dart';
 import '../models/round.dart';
 import '../state/game_controller.dart';
 import '../ui/palette.dart';
@@ -114,15 +113,6 @@ class RoundLogPop extends StatelessWidget {
     final pitchTotal = log.fold(0, (a, e) => a + e.pitchTotal);
     final pitchCorrect = log.fold(0, (a, e) => a + e.pitchCorrect);
     final onTime = log.fold(0, (a, e) => a + e.onTime);
-    final pairEntries = log.where((e) => e.pairDrill);
-    final pairTotal = pairEntries.fold(0, (a, e) => a + e.pairTotal);
-    final pairCorrect = pairEntries.fold(0, (a, e) => a + e.pairCorrect);
-    final focus = controller.settings.focusPair;
-    final pairLabel = focus.length == 2
-        ? focus.map((s) => Pitch(s).label).join(' ↔ ')
-        : (pairEntries.isNotEmpty
-            ? pairEntries.first.focusPairLabels.join(' ↔ ')
-            : '');
     TextStyle cap() => TextStyle(
         fontSize: 10.5,
         fontWeight: FontWeight.w700,
@@ -180,29 +170,6 @@ class RoundLogPop extends StatelessWidget {
                 style: TextStyle(fontSize: 11, color: p.muted)),
           ]),
         ),
-        if (pairTotal > 0) ...[
-          Container(
-              width: 2,
-              height: 38,
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              color: p.line),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('$pairLabel ACCURACY', style: cap().copyWith(color: p.tonic)),
-            const SizedBox(height: 2),
-            Text.rich(TextSpan(children: [
-              TextSpan(
-                  text: '$pairCorrect',
-                  style: TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.w700, color: p.tonic)),
-              TextSpan(
-                  text: ' / $pairTotal',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: p.muted)),
-            ])),
-          ]),
-        ],
       ]),
     );
   }
@@ -239,44 +206,6 @@ class RoundLogPop extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: e.won ? p.good : p.bad)),
         ),
-        if (e.perfectPitch) ...[
-          const SizedBox(width: 6),
-          Tooltip(
-            message: 'Perfect Pitch round',
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-              decoration: BoxDecoration(
-                color: p.tonicSoft,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text('PP',
-                  style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: p.tonic)),
-            ),
-          ),
-        ],
-        if (e.pairDrill) ...[
-          const SizedBox(width: 6),
-          Tooltip(
-            message: 'Pair Drill round',
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-              decoration: BoxDecoration(
-                color: p.tonicSoft,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(_compactPair(e.focusPairLabels),
-                  style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: p.tonic)),
-            ),
-          ),
-        ],
         if (e.echo) ...[
           const SizedBox(width: 6),
           Tooltip(
@@ -304,17 +233,13 @@ class RoundLogPop extends StatelessWidget {
                   runSpacing: 5,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    for (final n in e.notes)
-                      _chip(p, n.target, _ChipKind.target,
-                          ringed: e.focusPairLabels.contains(n.target)),
+                    for (final n in e.notes) _chip(p, n.target, _ChipKind.target),
                     Text('→',
                         style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
                             color: p.muted)),
-                    for (final n in e.notes)
-                      _playedChip(p, n,
-                          ringed: e.focusPairLabels.contains(n.target)),
+                    for (final n in e.notes) _playedChip(p, n),
                   ],
                 )
               : _echoGroups(p, e.echoRounds!),
@@ -364,21 +289,14 @@ class RoundLogPop extends StatelessWidget {
     );
   }
 
-  /// "E4"/"F4" → "E⇄F": compact enough for the round badge, sharps kept
-  /// since they're the whole point of a confusable pair.
-  String _compactPair(List<String> labels) =>
-      labels.map((l) => l.replaceAll(RegExp(r'[0-9]'), '')).join('⇄');
-
-  Widget _playedChip(Palette p, LoggedNote n, {bool ringed = false}) =>
-      switch (n.verdict) {
-        Verdict.good => _chip(p, n.target, _ChipKind.good, ringed: ringed),
-        Verdict.offTime => _chip(p, n.target, _ChipKind.late, ringed: ringed),
-        Verdict.wrongPitch =>
-          _chip(p, n.played ?? '?', _ChipKind.wrong, ringed: ringed),
-        _ => _chip(p, '–', _ChipKind.missed, ringed: ringed),
+  Widget _playedChip(Palette p, LoggedNote n) => switch (n.verdict) {
+        Verdict.good => _chip(p, n.target, _ChipKind.good),
+        Verdict.offTime => _chip(p, n.target, _ChipKind.late),
+        Verdict.wrongPitch => _chip(p, n.played ?? '?', _ChipKind.wrong),
+        _ => _chip(p, '–', _ChipKind.missed),
       };
 
-  Widget _chip(Palette p, String label, _ChipKind kind, {bool ringed = false}) {
+  Widget _chip(Palette p, String label, _ChipKind kind) {
     final (bg, fg, border) = switch (kind) {
       _ChipKind.target => (
           p.isNight ? p.skyMid : p.soft,
@@ -390,9 +308,8 @@ class RoundLogPop extends StatelessWidget {
       _ChipKind.wrong => (p.badSoft, p.bad, null),
       _ChipKind.missed => (Colors.transparent, p.muted, p.line),
     };
-    final resolvedBorder = ringed
-        ? Border.all(color: p.tonic, width: 2)
-        : (border != null ? Border.all(color: border, width: 1.5) : null);
+    final resolvedBorder =
+        border != null ? Border.all(color: border, width: 1.5) : null;
     return Container(
       height: 23,
       padding: const EdgeInsets.symmetric(horizontal: 7),

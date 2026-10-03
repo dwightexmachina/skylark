@@ -15,8 +15,8 @@ class StaffView extends StatelessWidget {
   /// Free play: render pending notes in ink (no verdict semantics).
   final bool neutralInk;
 
-  /// Perfect Pitch: draw wrong answers as a dyad — the guess in red plus
-  /// the correct note in amber — instead of the lone target notehead.
+  /// Echo: draw wrong answers as a dyad — the guess in red plus the
+  /// correct note in amber — instead of the lone target notehead.
   final bool wrongDyad;
 
   const StaffView({
@@ -268,8 +268,8 @@ class _StaffPainter extends CustomPainter {
         Paint()..color = palette.staff..strokeWidth = 2);
   }
 
-  /// Wrong Perfect Pitch answer: the guess (red) and the correct note
-  /// (amber) share one beat and one stem.
+  /// Wrong Echo answer: the guess (red) and the correct note (amber)
+  /// share one beat and one stem.
   void _drawWrongDyad(Canvas canvas, JudgedEvent j) {
     final played = j.played!;
     final target = j.event.pitch!;

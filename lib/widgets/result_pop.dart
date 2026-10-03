@@ -18,7 +18,6 @@ class ResultPop extends StatefulWidget {
   final VoidCallback onDismiss;
   final VoidCallback onNext;
   final VoidCallback onReplay;
-  final bool showReplay; // false in Perfect Pitch: there is no melody replay
 
   const ResultPop({
     super.key,
@@ -30,7 +29,6 @@ class ResultPop extends StatefulWidget {
     required this.onDismiss,
     required this.onNext,
     required this.onReplay,
-    this.showReplay = true,
   });
 
   @override
@@ -188,22 +186,16 @@ class _ResultPopState extends State<ResultPop> with TickerProviderStateMixin {
                     onTap: widget.onNext),
               ],
             ResultTier.good => [
-                if (widget.showReplay) ...[
-                  _btn(p, '↻  Replay', style: _B.blue, onTap: widget.onReplay),
-                  const SizedBox(width: 10),
-                ],
+                _btn(p, '↻  Replay', style: _B.blue, onTap: widget.onReplay),
+                const SizedBox(width: 10),
                 _btn(p, '▶  Next round', style: _B.primary,
                     onTap: widget.onNext),
               ],
             ResultTier.lost => [
-                if (widget.showReplay) ...[
-                  _btn(p, '↻  Hear it again', style: _B.primary,
-                      onTap: widget.onReplay),
-                  const SizedBox(width: 10),
-                ],
-                _btn(p, '▶  Next round',
-                    style: widget.showReplay ? _B.plain : _B.primary,
-                    onTap: widget.onNext),
+                _btn(p, '↻  Hear it again', style: _B.primary,
+                    onTap: widget.onReplay),
+                const SizedBox(width: 10),
+                _btn(p, '▶  Next round', style: _B.plain, onTap: widget.onNext),
               ],
           },
         ),

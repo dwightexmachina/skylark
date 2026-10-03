@@ -21,16 +21,6 @@ enum Difficulty {
   const Difficulty(this.label);
 }
 
-enum FocusIntensity {
-  low('Low', 0.4),
-  medium('Medium', 0.6),
-  high('High', 0.8);
-
-  final String label;
-  final double weight; // combined probability mass given to the focus pair
-  const FocusIntensity(this.label, this.weight);
-}
-
 enum ReplayBudget {
   unlimited('∞', -1),
   two('2', 2),
@@ -46,7 +36,6 @@ class Settings {
   /// Selected notes as semitones from C4 (0–12; 12 = C5).
   final Set<int> noteSet;
   final int measures; // 1–4
-  final int ppNotes; // Perfect Pitch: mystery notes per round, 1–10
   final int bpm; // 40–140
   final TimingWindow window;
   final bool tonicFirst;
@@ -57,12 +46,6 @@ class Settings {
   final bool allowHalves;
   final bool allowEighths;
   final bool allowRests;
-
-  /// Pair Drill: the two notes to emphasize (0, 1, or 2 of them — a round
-  /// can only start once exactly two are chosen, both must be enabled).
-  final Set<int> focusPair;
-  final FocusIntensity focusIntensity;
-  final ReplayBudget pairReplays;
 
   /// Echo: how many quarter notes play per round, 1-5.
   final int echoNotes;
@@ -78,7 +61,6 @@ class Settings {
   const Settings({
     this.noteSet = const {0, 2, 4, 5, 7, 12}, // C D E F G + C5
     this.measures = 1,
-    this.ppNotes = 5,
     this.bpm = 80,
     this.window = TimingWindow.loose, // matches the Beginner default
 
@@ -88,9 +70,6 @@ class Settings {
     this.allowHalves = false,
     this.allowEighths = false,
     this.allowRests = false,
-    this.focusPair = const {4, 5}, // E4 and F4
-    this.focusIntensity = FocusIntensity.medium,
-    this.pairReplays = ReplayBudget.one,
     this.echoNotes = 1,
     this.noteWeights = const {},
     this.echoReplays = ReplayBudget.one,
@@ -100,7 +79,6 @@ class Settings {
   Settings copyWith({
     Set<int>? noteSet,
     int? measures,
-    int? ppNotes,
     int? bpm,
     TimingWindow? window,
     bool? tonicFirst,
@@ -109,9 +87,6 @@ class Settings {
     bool? allowHalves,
     bool? allowEighths,
     bool? allowRests,
-    Set<int>? focusPair,
-    FocusIntensity? focusIntensity,
-    ReplayBudget? pairReplays,
     int? echoNotes,
     Map<int, int>? noteWeights,
     ReplayBudget? echoReplays,
@@ -120,7 +95,6 @@ class Settings {
     return Settings(
       noteSet: noteSet ?? this.noteSet,
       measures: measures ?? this.measures,
-      ppNotes: ppNotes ?? this.ppNotes,
       bpm: bpm ?? this.bpm,
       window: window ?? this.window,
       tonicFirst: tonicFirst ?? this.tonicFirst,
@@ -129,9 +103,6 @@ class Settings {
       allowHalves: allowHalves ?? this.allowHalves,
       allowEighths: allowEighths ?? this.allowEighths,
       allowRests: allowRests ?? this.allowRests,
-      focusPair: focusPair ?? this.focusPair,
-      focusIntensity: focusIntensity ?? this.focusIntensity,
-      pairReplays: pairReplays ?? this.pairReplays,
       echoNotes: echoNotes ?? this.echoNotes,
       noteWeights: noteWeights ?? this.noteWeights,
       echoReplays: echoReplays ?? this.echoReplays,

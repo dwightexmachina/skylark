@@ -28,7 +28,7 @@ class GameController extends ChangeNotifier {
   int totalPitchEvents = 0;
   int totalPitchCorrect = 0;
   int totalOnTime = 0;
-  int totalTimedEvents = 0; // training only: Perfect Pitch has no timing
+  int totalTimedEvents = 0; // training only: Echo streaming has no timing
   int streak = 0;
 
   // Last finished round, for the summary line.
@@ -68,8 +68,8 @@ class GameController extends ChangeNotifier {
   /// scheduled notes, and metronome exactly in place.
   bool paused = false;
 
-  // Mode: training (dictation), perfect pitch, pair drill, or free play.
-  GameMode mode = GameMode.pairDrill;
+  // Mode: training (dictation), echo (mystery-note streaming), or free play.
+  GameMode mode = GameMode.echo;
 
   /// Playing surface: piano keys or guitar fingerboard. Kept coherent with
   /// the tone: guitar tones show the fingerboard, everything else the keys.
@@ -89,8 +89,6 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
   bool get freePlay => mode == GameMode.freePlay;
-  bool get perfectPitch => mode == GameMode.perfectPitch;
-  bool get pairDrill => mode == GameMode.pairDrill;
   // Named echoMode, not echo: `echo` below is Free Play's echoed-note list.
   bool get echoMode => mode == GameMode.echo;
   final List<Pitch> echo = []; // notes echoed onto the staff (Free Play)
@@ -99,9 +97,9 @@ class GameController extends ChangeNotifier {
   double _metroStart = 0;
   double _nextClick = 0;
 
-  // Perfect Pitch stream state. Gameplay is a continuous stream of mystery
-  // notes; answered notes are still batched into [Settings.ppNotes]-sized
-  // log entries behind the scenes.
+  // Echo (one note per round) stream state. Gameplay is a continuous stream
+  // of mystery notes; answered notes are still batched into
+  // [_echoRoundsPerBatch]-sized log entries behind the scenes.
   int ppReplaysLeft = 0; // -1 = unlimited; per mystery note
   int ppAnswered = 0; // notes answered this stream
   String? ppFeedback; // teaching line after a wrong guess
@@ -110,22 +108,20 @@ class GameController extends ChangeNotifier {
   final List<JudgedEvent> _ppBatch = []; // answered notes awaiting a log entry
 
   // Echo stream state (notes-per-round >= 2 only; at 1 note per round, Echo
-  // reuses the Perfect Pitch fields and methods above directly).
+  // reuses the fields and methods above directly).
   int echoAnsweredInRound = 0; // how many of the current round answered so far
   bool echoListening = false; // true while the round's notes are still playing
   int _echoRoundStart = 0; // index into `judged` of the current round's start
   final List<List<JudgedEvent>> _echoBatch = []; // completed rounds awaiting a log entry
 
-  /// True while a mystery-note stream (Perfect Pitch, Pair Drill, or Echo)
-  /// is actively taking answers. All three share the same streaming engine.
-  bool get ppStreaming =>
-      (perfectPitch || pairDrill || echoMode) && phase == Phase.performing;
+  /// True while Echo's mystery-note stream is actively taking answers.
+  bool get ppStreaming => echoMode && phase == Phase.performing;
 
   double get _pos => (engine.now - _t0) / _spb;
 
   /// Playhead position in melody beats during the user's turn (or listening).
   double? get playheadBeat {
-    if (perfectPitch || pairDrill || echoMode) return null; // no pulse, no playhead
+    if (echoMode) return null; // no pulse, no playhead
     if (phase == Phase.listening) return _pos - _listenStart;
     if (phase == Phase.performing) return _pos - _userStart;
     return null;
@@ -141,8 +137,7 @@ class GameController extends ChangeNotifier {
 
   void playRound() {
     if (freePlay || phase.isActiveRound) return;
-    if (perfectPitch || pairDrill || echoMode) {
-      if (pairDrill && settings.focusPair.length != 2) return;
+    if (echoMode) {
       _startPPStream();
       return;
     }
@@ -152,7 +147,7 @@ class GameController extends ChangeNotifier {
   }
 
   void replay() {
-    if (freePlay || perfectPitch || pairDrill || echoMode || melody == null) {
+    if (freePlay || echoMode || melody == null) {
       return;
     }
     engine.stopAll();
@@ -160,7 +155,7 @@ class GameController extends ChangeNotifier {
   }
 
   void togglePause() {
-    if (perfectPitch || pairDrill || echoMode) return; // nothing to freeze: no timeline
+    if (echoMode) return; // nothing to freeze: no timeline
     if (!paused && !phase.isActiveRound) return;
     paused = !paused;
     if (paused) {
@@ -179,7 +174,7 @@ class GameController extends ChangeNotifier {
   }
 
   void skip() {
-    if (perfectPitch || pairDrill || echoMode) {
+    if (echoMode) {
       stopPP();
       return;
     }
@@ -189,13 +184,11 @@ class GameController extends ChangeNotifier {
     _finish();
   }
 
-  // ------------------------------------------------------------ perfect pitch
+  // -------------------------------------------------------------------- echo
 
   /// A continuous stream of mystery notes. Each plays with no tonic, no
   /// count-in and no metronome; the user's first key press is the answer,
   /// and the next mystery note follows until the user presses Stop.
-  /// Shared by Perfect Pitch and Pair Drill — they differ only in how the
-  /// next note is chosen (see [_nextMystery]).
   void _startPPStream() {
     _clearPause();
     engine.unlock();
@@ -221,31 +214,13 @@ class GameController extends ChangeNotifier {
   }
 
   void _nextMystery() {
-    final semitone = pairDrill
-        ? _pickPairDrillSemitone()
-        : echoMode
-            ? _pickWeightedSemitone()
-            : _pickUniformSemitone();
+    final semitone = _pickWeightedSemitone();
     judged.add(JudgedEvent(NoteEvent(
         startBeat: judged.length.toDouble(),
         durationBeats: 1,
         pitch: Pitch(semitone))));
-    ppReplaysLeft = pairDrill
-        ? settings.pairReplays.count
-        : echoMode
-            ? settings.echoReplays.count
-            : switch (settings.difficulty) {
-                Difficulty.beginner => -1,
-                Difficulty.easy => 2,
-                Difficulty.standard || Difficulty.custom => 1,
-                Difficulty.hard => 0,
-              };
+    ppReplaysLeft = settings.echoReplays.count;
     _playMystery();
-  }
-
-  int _pickUniformSemitone() {
-    final pool = settings.noteSet.toList();
-    return pool[_rng.nextInt(pool.length)];
   }
 
   /// Weighted pick for Echo: a note's odds are its [Settings.noteWeights]
@@ -264,40 +239,6 @@ class GameController extends ChangeNotifier {
       r -= weights[i];
     }
     return pool.last; // floating-point fallback
-  }
-
-  /// Weighted pick for Pair Drill: concentrates [Settings.focusIntensity]'s
-  /// probability mass on the two focus notes, but excludes the previous
-  /// note's focus partner so the pair never plays back-to-back — hearing
-  /// them adjacent would turn absolute-pitch recall into a trivial interval
-  /// comparison, which is exactly the shortcut this mode exists to deny.
-  int _pickPairDrillSemitone() {
-    final pair = settings.focusPair.toList();
-    final all = settings.noteSet.toList();
-    if (pair.length != 2) return all[_rng.nextInt(all.length)]; // defensive
-
-    final previous = judged.isNotEmpty ? judged.last.event.pitch?.semitone : null;
-    final excludedPartner = (previous != null && pair.contains(previous))
-        ? pair.firstWhere((s) => s != previous)
-        : null;
-    final focusCandidates = pair.where((s) => s != excludedPartner).toList();
-    final otherCandidates = all.where((s) => !pair.contains(s)).toList();
-
-    final focusWeight = settings.focusIntensity.weight;
-    final entries = <(int, double)>[
-      for (final s in focusCandidates)
-        (s, focusWeight / focusCandidates.length),
-      if (otherCandidates.isNotEmpty)
-        for (final s in otherCandidates)
-          (s, (1 - focusWeight) / otherCandidates.length),
-    ];
-    final total = entries.fold(0.0, (sum, e) => sum + e.$2);
-    var r = _rng.nextDouble() * total;
-    for (final (semitone, weight) in entries) {
-      if (r < weight) return semitone;
-      r -= weight;
-    }
-    return entries.last.$1; // floating-point fallback
   }
 
   void _playMystery() {
@@ -349,11 +290,7 @@ class GameController extends ChangeNotifier {
     if (good) totalPitchCorrect++;
     streak = good ? streak + 1 : 0;
     _ppBatch.add(j);
-    // Echo overrides the generic Log grouping setting with its own fixed
-    // formula (batch size 5 at one note per round); ppNotes stays exclusive
-    // to Perfect Pitch otherwise.
-    final batchTarget = echoMode ? _echoRoundsPerBatch : settings.ppNotes;
-    if (_ppBatch.length >= batchTarget) _commitPPBatch();
+    if (_ppBatch.length >= _echoRoundsPerBatch) _commitPPBatch();
     _ppTimer?.cancel();
     _ppTimer = Timer(Duration(milliseconds: good ? 1100 : 1800), () {
       if (!ppStreaming) return;
@@ -363,31 +300,20 @@ class GameController extends ChangeNotifier {
   }
 
   /// Freeze the answered notes gathered so far into one session-log entry.
-  /// The log keeps Perfect Pitch results grouped in [Settings.ppNotes]-sized
-  /// sets even though gameplay streams continuously.
+  /// The log keeps results grouped in [_echoRoundsPerBatch]-sized sets even
+  /// though gameplay streams continuously.
   void _commitPPBatch() {
     if (_ppBatch.isEmpty) return;
     final correct = _ppBatch.where((j) => j.verdict == Verdict.good).length;
-    final focusLabels = pairDrill
-        ? settings.focusPair.map((s) => Pitch(s).label).toList()
-        : const <String>[];
-    final pairNotes = pairDrill
-        ? _ppBatch
-            .where((j) => settings.focusPair.contains(j.event.pitch!.semitone))
-            .toList()
-        : const <JudgedEvent>[];
     roundLog.insert(
       0,
       RoundLogEntry(
         number: roundLog.length + 1,
         won: correct == _ppBatch.length,
-        perfectPitch: perfectPitch,
-        pairDrill: pairDrill,
-        focusPairLabels: focusLabels,
         // echoRounds stays null here: at one note per round, Echo degenerates
-        // to exactly this flat Perfect-Pitch-style batch, no position to track.
-        echo: echoMode,
-        echoNoteCount: echoMode ? settings.echoNotes : 0,
+        // to a flat batch of independent 1-note rounds, no position to track.
+        echo: true,
+        echoNoteCount: settings.echoNotes,
         notes: [
           for (final j in _ppBatch)
             LoggedNote(
@@ -401,8 +327,6 @@ class GameController extends ChangeNotifier {
         // sensibly, but leave the timed totals untouched.
         onTime: correct,
         pitchTotal: _ppBatch.length,
-        pairCorrect: pairNotes.where((j) => j.verdict == Verdict.good).length,
-        pairTotal: pairNotes.length,
       ),
     );
     _ppBatch.clear();
@@ -431,9 +355,9 @@ class GameController extends ChangeNotifier {
   }
 
   // --------------------------------------------------------------- echo rounds
-  // Echo at notes-per-round >= 2 needs its own round engine: Perfect Pitch
-  // and Pair Drill always have exactly one pending note at a time, but Echo
-  // plays a whole round's worth before any answering starts, then judges
+  // Echo at notes-per-round >= 2 needs its own round engine: at one note per
+  // round there's always exactly one pending note at a time, but at two or
+  // more Echo plays a whole round's worth before any answering starts, then judges
   // each key press against the matching position in that round — a swapped
   // pair of notes scores two wrongs, never "right notes, wrong order" credit.
   // At exactly one note per round, Echo never reaches these methods at all;
@@ -727,8 +651,8 @@ class GameController extends ChangeNotifier {
     if (!settings.noteSet.contains(semitone)) return;
     if (!freePlay && !keysActive) return;
     // Between mystery notes the keys stay silent — a free tone there would
-    // be a reference pitch, which Perfect Pitch forbids. An Echo round's
-    // own notes playing back are silenced the same way.
+    // be a reference pitch, which Echo forbids. An Echo round's own notes
+    // playing back are silenced the same way.
     final multiNoteEcho = echoMode && settings.echoNotes > 1;
     if (ppStreaming &&
         ((multiNoteEcho && echoListening) ||
@@ -742,7 +666,7 @@ class GameController extends ChangeNotifier {
     if (freePlay) {
       if (echo.length >= settings.measures * 4) echo.clear();
       echo.add(pitch);
-    } else if (perfectPitch || pairDrill || echoMode) {
+    } else if (echoMode) {
       if (ppStreaming) {
         multiNoteEcho ? _echoAnswer(pitch) : _ppAnswer(pitch);
       }
@@ -780,7 +704,7 @@ class GameController extends ChangeNotifier {
     melody = null;
     ppFeedback = null;
     ppAnswered = 0;
-    streak = 0; // means per-round in training, per-note in Perfect Pitch
+    streak = 0; // means per-round in training, per-note (or per-round) in Echo
     activeBeat = null;
     flashSemitone = null;
     notifyListeners();
@@ -876,35 +800,15 @@ class GameController extends ChangeNotifier {
 
   void toggleNote(int semitone) {
     final set = {...settings.noteSet};
-    final focus = {...settings.focusPair};
     final weights = {...settings.noteWeights};
     if (set.contains(semitone)) {
-      // Pair Drill needs the pair plus at least one decoy to mean anything.
-      final minNotes = pairDrill ? 3 : 2;
-      if (set.length <= minNotes) return;
+      if (set.length <= 2) return;
       set.remove(semitone);
-      focus.remove(semitone); // a disabled note can't stay focused
-      weights.remove(semitone); // or keep a Notes Frequency weight
+      weights.remove(semitone); // a disabled note can't keep a weight
     } else {
       set.add(semitone);
     }
-    updateSettings(settings.copyWith(
-        noteSet: set, focusPair: focus, noteWeights: weights));
-  }
-
-  /// Pair Drill: toggle a note in or out of the focus pair. Only enabled
-  /// notes are eligible, and once two are chosen the rest lock — deselect
-  /// one first to free a slot.
-  void toggleFocusPair(int semitone) {
-    if (!settings.noteSet.contains(semitone)) return;
-    final focus = {...settings.focusPair};
-    if (focus.contains(semitone)) {
-      focus.remove(semitone);
-    } else {
-      if (focus.length >= 2) return;
-      focus.add(semitone);
-    }
-    updateSettings(settings.copyWith(focusPair: focus));
+    updateSettings(settings.copyWith(noteSet: set, noteWeights: weights));
   }
 
   double get secondsPerBeat => _spb;
