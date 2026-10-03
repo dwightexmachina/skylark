@@ -8,8 +8,10 @@ import '../ui/palette.dart';
 
 class SettingsPanel extends StatefulWidget {
   final GameController controller;
+  final VoidCallback onOpenNotesFrequency;
 
-  const SettingsPanel({super.key, required this.controller});
+  const SettingsPanel(
+      {super.key, required this.controller, required this.onOpenNotesFrequency});
 
   @override
   State<SettingsPanel> createState() => _SettingsPanelState();
@@ -39,7 +41,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
                     letterSpacing: 0.8,
                     color: p.ink)),
             const SizedBox(height: 18),
-            if (c.pairDrill)
+            if (c.echoMode)
+              ..._echoSections(p, c, s)
+            else if (c.pairDrill)
               ..._pairDrillSections(p, c, s)
             else ...[
             _head(p, 'Difficulty'),
@@ -300,6 +304,137 @@ class _SettingsPanelState extends State<SettingsPanel> {
     ];
   }
 
+  /// Echo's whole sidebar: no difficulty preset, no tempo, no Log grouping
+  /// (batch size is derived from Notes per round, not user-configurable).
+  List<Widget> _echoSections(Palette p, GameController c, Settings s) {
+    return [
+      _head(p, 'Notes in play'),
+      const SizedBox(height: 8),
+      _noteChips(p, c),
+      const SizedBox(height: 6),
+      _sub(p, '${s.noteSet.length} of $semitoneCount selected. At least 2 required.'),
+      const SizedBox(height: 12),
+      InkWell(
+        onTap: widget.onOpenNotesFrequency,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: p.tonicSoft,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          alignment: Alignment.center,
+          child: Text('🎚️ Notes Frequency',
+              style: TextStyle(
+                  fontSize: 12.5, fontWeight: FontWeight.w800, color: p.tonic)),
+        ),
+      ),
+      const SizedBox(height: 20),
+      _head(p, 'Notes per round'),
+      const SizedBox(height: 8),
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _echoNotesStepper(p, c),
+          if (s.echoNotes > 1) ...[
+            const SizedBox(width: 8),
+            _echoLagStepper(p, c),
+          ],
+        ],
+      ),
+      const SizedBox(height: 6),
+      _sub(
+          p,
+          s.echoNotes > 1
+              ? 'How many quarter notes play before you echo them back, in '
+                  'order (1–5), and the gap between each (0.25s–2s).'
+              : 'How many quarter notes play before you echo them back, in '
+                  'order (1–5).'),
+      const SizedBox(height: 20),
+      _head(p, 'Replays'),
+      const SizedBox(height: 8),
+      _segmented<ReplayBudget>(
+        p,
+        values: ReplayBudget.values,
+        selected: s.echoReplays,
+        label: (r) => r.label,
+        onTap: (r) => c.updateSettings(s.copyWith(echoReplays: r)),
+      ),
+      const SizedBox(height: 6),
+      _sub(p, switch (s.echoReplays) {
+        ReplayBudget.unlimited => 'Replay the whole round as often as you like.',
+        ReplayBudget.two => 'Two replays of the whole round.',
+        ReplayBudget.one => 'One replay of the whole round.',
+        ReplayBudget.none => 'One listen only — no replays.',
+      }),
+    ];
+  }
+
+  Widget _echoNotesStepper(Palette p, GameController c) {
+    final value = c.settings.echoNotes;
+    void set(int v) => c.updateSettings(c.settings.copyWith(echoNotes: v));
+    return Container(
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [BoxShadow(color: p.btnShadow, offset: const Offset(0, 3))],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _stepBtn(p, '−', value > 1, () => set(value - 1), width: 32),
+          Container(
+            width: 30,
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            alignment: Alignment.center,
+            child: Text('$value',
+                style: TextStyle(fontWeight: FontWeight.w700, color: p.ink)),
+          ),
+          _stepBtn(p, '+', value < 5, () => set(value + 1), width: 32),
+        ],
+      ),
+    );
+  }
+
+  /// Hidden at one note per round — there's no gap to configure between a
+  /// single note and itself.
+  Widget _echoLagStepper(Palette p, GameController c) {
+    if (c.settings.echoNotes < 2) return const SizedBox.shrink();
+    final value = c.settings.echoNoteLag;
+    void set(double v) => c.updateSettings(c.settings.copyWith(echoNoteLag: v));
+    return Container(
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [BoxShadow(color: p.btnShadow, offset: const Offset(0, 3))],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _stepBtn(p, '−', value > 0.25, () => set(value - 0.25), width: 32),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+            alignment: Alignment.center,
+            child: Text('⏱${_lagLabel(value)}',
+                style: TextStyle(
+                    fontSize: 11.5, fontWeight: FontWeight.w700, color: p.ink)),
+          ),
+          _stepBtn(p, '+', value < 2, () => set(value + 0.25), width: 32),
+        ],
+      ),
+    );
+  }
+
+  String _lagLabel(double seconds) {
+    final text = seconds == seconds.roundToDouble()
+        ? seconds.toStringAsFixed(0)
+        : seconds.toStringAsFixed(2).replaceFirst(RegExp(r'0$'), '');
+    return '${text}s';
+  }
+
   /// One button per currently-enabled note — the set shrinks and grows
   /// live as "Notes in play" changes, rather than snapshotting a picker.
   Widget _pairPicker(Palette p, GameController c) {
@@ -486,11 +621,12 @@ class _SettingsPanelState extends State<SettingsPanel> {
     );
   }
 
-  Widget _stepBtn(Palette p, String label, bool enabled, VoidCallback onTap) {
+  Widget _stepBtn(Palette p, String label, bool enabled, VoidCallback onTap,
+      {double width = 40}) {
     return InkWell(
       onTap: enabled ? onTap : null,
       child: Container(
-        width: 40,
+        width: width,
         padding: const EdgeInsets.symmetric(vertical: 7),
         alignment: Alignment.center,
         child: Text(label,

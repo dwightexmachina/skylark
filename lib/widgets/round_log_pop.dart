@@ -277,28 +277,90 @@ class RoundLogPop extends StatelessWidget {
             ),
           ),
         ],
+        if (e.echo) ...[
+          const SizedBox(width: 6),
+          Tooltip(
+            message: 'Echo round',
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: p.tonicSoft,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text('×${e.echoNoteCount}',
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: p.tonic)),
+            ),
+          ),
+        ],
         const SizedBox(width: 10),
         Expanded(
-          child: Wrap(
-            spacing: 5,
-            runSpacing: 5,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              for (final n in e.notes)
-                _chip(p, n.target, _ChipKind.target,
-                    ringed: e.focusPairLabels.contains(n.target)),
-              Text('→',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: p.muted)),
-              for (final n in e.notes)
-                _playedChip(p, n,
-                    ringed: e.focusPairLabels.contains(n.target)),
-            ],
-          ),
+          child: e.echoRounds == null
+              ? Wrap(
+                  spacing: 5,
+                  runSpacing: 5,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    for (final n in e.notes)
+                      _chip(p, n.target, _ChipKind.target,
+                          ringed: e.focusPairLabels.contains(n.target)),
+                    Text('→',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: p.muted)),
+                    for (final n in e.notes)
+                      _playedChip(p, n,
+                          ringed: e.focusPairLabels.contains(n.target)),
+                  ],
+                )
+              : _echoGroups(p, e.echoRounds!),
         ),
       ]),
+    );
+  }
+
+  /// Echo's grouped layout: one cluster of position-numbered chip-pairs per
+  /// round in the batch, with a thin divider between consecutive rounds.
+  Widget _echoGroups(Palette p, List<List<LoggedNote>> rounds) {
+    final children = <Widget>[];
+    for (var g = 0; g < rounds.length; g++) {
+      if (g > 0) {
+        children.add(Container(width: 1.5, height: 42, color: p.line));
+      }
+      children.add(Wrap(
+        spacing: 6,
+        runSpacing: 5,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (var i = 0; i < rounds[g].length; i++)
+            _echoPosition(p, rounds[g][i], i + 1),
+        ],
+      ));
+    }
+    return Wrap(
+      spacing: 10,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: children,
+    );
+  }
+
+  Widget _echoPosition(Palette p, LoggedNote n, int position) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _chip(p, n.target, _ChipKind.target),
+        const SizedBox(height: 3),
+        _playedChip(p, n),
+        const SizedBox(height: 2),
+        Text('$position',
+            style: TextStyle(
+                fontSize: 9, fontWeight: FontWeight.w700, color: p.muted)),
+      ],
     );
   }
 

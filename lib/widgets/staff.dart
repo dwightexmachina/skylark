@@ -145,6 +145,8 @@ class _StaffPainter extends CustomPainter {
       if (!j.revealed) continue;
       if (j.isRest) {
         _drawRest(canvas, j.event);
+      } else if (j.placeholder) {
+        _drawPlaceholder(canvas, j.event.startBeat, j.played!);
       } else {
         final beamed = j.event.beamWithNext &&
             i + 1 < judged.length &&
@@ -229,6 +231,22 @@ class _StaffPainter extends CustomPainter {
       ..lineTo(x + 4, y0 + 27)
       ..cubicTo(x - 4, y0 + 24, x - 4, y0 + 32, x + 2, y0 + 34);
     canvas.drawPath(p, paint);
+  }
+
+  /// Echo mid-round: shows what the player just played — at its real pitch
+  /// height, so they get confirmation of their own answer — but never the
+  /// target, and never colored by verdict, until the whole round is in.
+  void _drawPlaceholder(Canvas canvas, double startBeat, Pitch played) {
+    final x = _beatToX(startBeat);
+    final y = _letterY(played.letter);
+    final color = palette.muted;
+    if (played.letter == 0) {
+      _drawLedger(canvas, x, y);
+    }
+    _drawHead(canvas, x, y, color);
+    if (played.isSharp) {
+      _text(canvas, '♯', Offset(x - 22, y - 11), 17, color);
+    }
   }
 
   void _drawHead(Canvas canvas, double x, double y, Color color,

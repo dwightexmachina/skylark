@@ -9,6 +9,12 @@ class JudgedEvent {
   double? deltaBeats; // click time minus expected time, in beats
   bool revealed = false;
 
+  /// Echo (notes-per-round >= 2): true once answered but before the whole
+  /// round is in, so the staff shows a pitch-neutral marker instead of the
+  /// real note — revealing one position's correctness early would let the
+  /// player use it to infer the rest of the sequence before finishing it.
+  bool placeholder = false;
+
   JudgedEvent(this.event);
 
   bool get isRest => event.isRest;
@@ -30,6 +36,13 @@ class RoundLogEntry {
   final bool perfectPitch; // true when this was a Perfect Pitch round
   final bool pairDrill; // true when this was a Pair Drill round
   final List<String> focusPairLabels; // Pair Drill: e.g. ['E4', 'F4']
+  final bool echo; // true when this was an Echo round
+  final int echoNoteCount; // Echo: notes per round (the ×N badge)
+  /// Echo: one inner list per batched round, in order, when notes-per-round
+  /// is 2 or more. Null means "render flat" — either a non-Echo entry, or
+  /// Echo at 1 note per round, which degenerates to a plain Perfect Pitch
+  /// row (several independent 1-note rounds, no position to track).
+  final List<List<LoggedNote>>? echoRounds;
   final List<LoggedNote> notes;
   final int pitchCorrect, onTime, pitchTotal;
   final int pairCorrect, pairTotal; // Pair Drill: accuracy on the pair only
@@ -39,6 +52,9 @@ class RoundLogEntry {
     this.perfectPitch = false,
     this.pairDrill = false,
     this.focusPairLabels = const [],
+    this.echo = false,
+    this.echoNoteCount = 0,
+    this.echoRounds,
     required this.notes,
     required this.pitchCorrect,
     required this.onTime,
@@ -50,8 +66,8 @@ class RoundLogEntry {
 
 enum Phase { idle, tonic, countIn, listening, userCount, performing, summary }
 
-/// The four ways to use Skylark.
-enum GameMode { training, perfectPitch, freePlay, pairDrill }
+/// The five ways to use Skylark.
+enum GameMode { training, perfectPitch, freePlay, pairDrill, echo }
 
 /// Which playing surface is shown: piano keys or a guitar fingerboard.
 /// Purely visual — notes, computer keys, and audio are identical.

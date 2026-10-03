@@ -64,6 +64,17 @@ class Settings {
   final FocusIntensity focusIntensity;
   final ReplayBudget pairReplays;
 
+  /// Echo: how many quarter notes play per round, 1-5.
+  final int echoNotes;
+  /// Echo: per-note weight (1-10) for the "Notes Frequency" weighted
+  /// generator. A note's odds are its weight over the sum of all enabled
+  /// notes' weights. A note absent from the map defaults to 5.
+  final Map<int, int> noteWeights;
+  final ReplayBudget echoReplays;
+  /// Echo: seconds between the start of one round note and the next,
+  /// 0.25-2.0 in quarter-second steps.
+  final double echoNoteLag;
+
   const Settings({
     this.noteSet = const {0, 2, 4, 5, 7, 12}, // C D E F G + C5
     this.measures = 1,
@@ -80,6 +91,10 @@ class Settings {
     this.focusPair = const {4, 5}, // E4 and F4
     this.focusIntensity = FocusIntensity.medium,
     this.pairReplays = ReplayBudget.one,
+    this.echoNotes = 1,
+    this.noteWeights = const {},
+    this.echoReplays = ReplayBudget.one,
+    this.echoNoteLag = 0.5,
   });
 
   Settings copyWith({
@@ -97,6 +112,10 @@ class Settings {
     Set<int>? focusPair,
     FocusIntensity? focusIntensity,
     ReplayBudget? pairReplays,
+    int? echoNotes,
+    Map<int, int>? noteWeights,
+    ReplayBudget? echoReplays,
+    double? echoNoteLag,
   }) {
     return Settings(
       noteSet: noteSet ?? this.noteSet,
@@ -113,6 +132,10 @@ class Settings {
       focusPair: focusPair ?? this.focusPair,
       focusIntensity: focusIntensity ?? this.focusIntensity,
       pairReplays: pairReplays ?? this.pairReplays,
+      echoNotes: echoNotes ?? this.echoNotes,
+      noteWeights: noteWeights ?? this.noteWeights,
+      echoReplays: echoReplays ?? this.echoReplays,
+      echoNoteLag: echoNoteLag ?? this.echoNoteLag,
     );
   }
 

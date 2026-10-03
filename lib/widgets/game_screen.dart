@@ -11,6 +11,7 @@ import '../ui/palette.dart';
 import 'fretboard.dart';
 import 'keyboard.dart';
 import 'lark.dart';
+import 'notes_frequency_pop.dart';
 import 'result_pop.dart';
 import 'round_log_pop.dart';
 import 'settings_panel.dart';
@@ -39,6 +40,7 @@ class _GameScreenState extends State<GameScreen> {
 
   bool _splashVisible = true;
   bool _logVisible = false;
+  bool _notesFrequencyVisible = false;
   final GlobalKey<SplashScreenState> _splashKey = GlobalKey();
 
   /// Timeline attempt whose result pop was dismissed (-1 = none).
@@ -184,6 +186,14 @@ class _GameScreenState extends State<GameScreen> {
                   onDismiss: () => setState(() => _logVisible = false),
                 ),
               ),
+            if (_notesFrequencyVisible)
+              Positioned.fill(
+                child: NotesFrequencyPopup(
+                  controller: controller,
+                  onDismiss: () =>
+                      setState(() => _notesFrequencyVisible = false),
+                ),
+              ),
             Positioned.fill(
               child: TutorialOverlay(
                 tut: tutorial,
@@ -269,7 +279,11 @@ class _GameScreenState extends State<GameScreen> {
                           ],
                         ),
                         padding: const EdgeInsets.fromLTRB(18, 20, 18, 24),
-                        child: SettingsPanel(controller: controller),
+                        child: SettingsPanel(
+                          controller: controller,
+                          onOpenNotesFrequency: () =>
+                              setState(() => _notesFrequencyVisible = true),
+                        ),
                       ),
                     );
                     if (wide) {
@@ -366,7 +380,7 @@ class _GameScreenState extends State<GameScreen> {
           ),
                 if (!c.freePlay) ...[
                   _stat(p, 'Pitch', pct(c.totalPitchCorrect, c.totalPitchEvents)),
-                  if (!c.perfectPitch && !c.pairDrill)
+                  if (!c.perfectPitch && !c.pairDrill && !c.echoMode)
                     _stat(p, 'Timing', pct(c.totalOnTime, c.totalTimedEvents)),
                   _stat(p, '⭐ Streak', '${c.streak}'),
                 ],
@@ -503,6 +517,7 @@ class _GameScreenState extends State<GameScreen> {
         chip('Perfect Pitch', c.perfectPitch,
             () => c.setMode(GameMode.perfectPitch)),
         chip('Pair Drill', c.pairDrill, () => c.setMode(GameMode.pairDrill)),
+        chip('Echo', c.echoMode, () => c.setMode(GameMode.echo)),
         chip('Free play', c.freePlay, () => c.setMode(GameMode.freePlay)),
       ]),
     );
@@ -553,7 +568,7 @@ class _GameScreenState extends State<GameScreen> {
                   pitch: c.echo[i]))
                 ..revealed = true,
           ]
-        : (c.perfectPitch || c.pairDrill)
+        : (c.perfectPitch || c.pairDrill || c.echoMode)
             ? _ppWindow(c.judged)
             : c.judged;
     return Padding(
@@ -578,7 +593,8 @@ class _GameScreenState extends State<GameScreen> {
               children: [
                 _scoreHeader(p),
                 _DottedDivider(color: p.line),
-                if ((c.perfectPitch || c.pairDrill) && c.ppFeedback != null)
+                if ((c.perfectPitch || c.pairDrill || c.echoMode) &&
+                    c.ppFeedback != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
                     child: Text(c.ppFeedback!,
@@ -591,13 +607,13 @@ class _GameScreenState extends State<GameScreen> {
                   padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
                   child: StaffView(
                     judged: display,
-                    measures: (c.perfectPitch || c.pairDrill)
+                    measures: (c.perfectPitch || c.pairDrill || c.echoMode)
                         ? ((display.length + 3) ~/ 4).clamp(1, 2)
                         : c.melody?.measures ?? c.settings.measures,
                     playheadBeat: c.playheadBeat,
                     secondsPerBeat: c.secondsPerBeat,
                     neutralInk: c.freePlay,
-                    wrongDyad: c.perfectPitch || c.pairDrill,
+                    wrongDyad: c.perfectPitch || c.pairDrill || c.echoMode,
                   ),
                 ),
               ],
@@ -608,7 +624,7 @@ class _GameScreenState extends State<GameScreen> {
           if (!c.freePlay &&
               (c.phase == Phase.performing ||
                   c.phase == Phase.summary ||
-                  ((c.perfectPitch || c.pairDrill) &&
+                  ((c.perfectPitch || c.pairDrill || c.echoMode) &&
                       c.judged.isNotEmpty))) ...[
             _legend(p),
             const SizedBox(height: 18),
@@ -751,7 +767,7 @@ class _GameScreenState extends State<GameScreen> {
             ),
           ),
           const SizedBox(width: 16),
-          if (c.perfectPitch || c.pairDrill)
+          if (c.perfectPitch || c.pairDrill || c.echoMode)
             Text(
                 switch (c.ppAnswered) {
                   0 => '',
@@ -869,6 +885,34 @@ class _GameScreenState extends State<GameScreen> {
         'Press Start to drill ${pairLabels.join(" vs ")}. No tonic, no pulse — stop whenever you like.'
       );
     }
+    if (c.echoMode) {
+      final n = c.settings.echoNotes;
+      if (c.phase == Phase.performing) {
+        if (c.echoListening) {
+          return (
+            'Listening…',
+            n > 1 ? 'Playing $n notes — remember the order.' : 'What do you hear?'
+          );
+        }
+        if (n > 1) {
+          return (
+            'Note ${c.echoAnsweredInRound + 1} of $n',
+            'Play them back in the order you heard them.'
+          );
+        }
+        return (
+          c.streak > 1 ? 'What do you hear? — streak ${c.streak}'
+              : 'What do you hear?',
+          'No tonic, no pulse. Press the key you think it is — your first press counts.'
+        );
+      }
+      return (
+        'Ready when you are',
+        n > 1
+            ? 'Press Start for runs of $n mystery notes to echo back, in order.'
+            : 'Press Start for a stream of mystery notes. No tonic, no pulse — stop whenever you like.'
+      );
+    }
     final measures = c.melody?.measures ?? c.settings.measures;
     switch (c.phase) {
       case Phase.idle:
@@ -922,7 +966,7 @@ class _GameScreenState extends State<GameScreen> {
       );
     }
     final active = c.phase.isActiveRound;
-    if (c.perfectPitch || c.pairDrill) {
+    if (c.perfectPitch || c.pairDrill || c.echoMode) {
       final canStart = !c.pairDrill || c.settings.focusPair.length == 2;
       return Wrap(
         spacing: 12,
@@ -1027,7 +1071,8 @@ class _GameScreenState extends State<GameScreen> {
     return Wrap(
       spacing: 18,
       runSpacing: 6,
-      children: (controller.perfectPitch || controller.pairDrill)
+      children:
+          (controller.perfectPitch || controller.pairDrill || controller.echoMode)
           ? [
               item(p.good, 'Right'),
               item(p.bad, 'Your guess'),
