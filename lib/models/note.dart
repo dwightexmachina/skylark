@@ -59,8 +59,16 @@ class Melody {
   final List<NoteEvent> events;
   final int measures;
 
-  const Melody(this.events, this.measures);
+  /// Beats of anacrusis before the first downbeat — the "Oh" in "Oh when the
+  /// saints". Event start beats are measured from the first sounding note, so
+  /// the downbeat sits at [pickupBeats] and the full bars run from there. A
+  /// melody without a pickup leaves this 0 and behaves exactly as before.
+  final double pickupBeats;
 
-  double get totalBeats => measures * 4.0;
+  const Melody(this.events, this.measures, {this.pickupBeats = 0});
+
+  /// Includes the anacrusis: the pickup is real time the player has to hear
+  /// and play back, so every timeline offset derived from this must count it.
+  double get totalBeats => measures * 4.0 + pickupBeats;
   Iterable<NoteEvent> get pitchEvents => events.where((e) => !e.isRest);
 }

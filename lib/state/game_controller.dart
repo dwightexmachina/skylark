@@ -53,6 +53,11 @@ class GameController extends ChangeNotifier {
   double _userStart = 0;
   double _endBeat = 0;
 
+  /// Anacrusis of the melody in play. [_listenStart] and [_userStart] mark
+  /// melody beat 0 — the first sounding note — so the downbeat, which is what
+  /// the metronome accents, sits this many beats later.
+  double _pickupBeats = 0;
+
   Timer? _ticker;
 
   // Transient UI state.
@@ -509,6 +514,7 @@ class GameController extends ChangeNotifier {
     final m = melody!;
     judged = [for (final e in m.events) JudgedEvent(e)];
     roundPitchTotal = m.pitchEvents.length;
+    _pickupBeats = m.pickupBeats;
 
     _spb = 60.0 / settings.bpm;
     _tonicBeats = settings.tonicFirst ? 2 : 0;
@@ -526,13 +532,15 @@ class GameController extends ChangeNotifier {
           const Pitch(0).frequency, settings.tone, timeOf(0), 1.5 * _spb);
     }
     // Metronome through count-in, listening, user count-in and the user's turn.
+    // Accents mark the downbeat, which a pickup pushes past melody beat 0 —
+    // the anacrusis sounds over the beats between the count-in and bar 1.
     for (var b = countStart; b < _endBeat; b++) {
       final inListen = b >= _listenStart && b < _userCountStart;
       final inPerform = b >= _userStart;
       final accent = b == countStart ||
           b == _userCountStart ||
-          (inListen && (b - _listenStart) % 4 == 0) ||
-          (inPerform && (b - _userStart) % 4 == 0);
+          (inListen && (b - _listenStart - _pickupBeats) % 4 == 0) ||
+          (inPerform && (b - _userStart - _pickupBeats) % 4 == 0);
       engine.scheduleClick(timeOf(b), accent: accent);
     }
     for (final e in m.events) {
@@ -565,12 +573,13 @@ class GameController extends ChangeNotifier {
     };
 
     // Metronome lamp.
+    // Lamp 0 is the downbeat, so it stays in step with the accented click.
     activeBeat = switch (phase) {
       Phase.tonic => null,
       Phase.countIn => ((pos - _tonicBeats).floor()) % 4,
-      Phase.listening => ((pos - _listenStart).floor()) % 4,
+      Phase.listening => ((pos - _listenStart - _pickupBeats).floor()) % 4,
       Phase.userCount => ((pos - _userCountStart).floor()) % 4,
-      Phase.performing => ((pos - _userStart).floor()) % 4,
+      Phase.performing => ((pos - _userStart - _pickupBeats).floor()) % 4,
       _ => null,
     };
 

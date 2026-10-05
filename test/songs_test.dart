@@ -9,6 +9,7 @@ import 'package:ear_trainer/state/game_controller.dart';
 import 'package:ear_trainer/widgets/result_pop.dart';
 import 'package:ear_trainer/widgets/round_log_pop.dart';
 import 'package:ear_trainer/widgets/settings_panel.dart';
+import 'package:ear_trainer/widgets/staff.dart';
 
 GameController freshController() {
   web.window.localStorage.clear();
@@ -31,9 +32,18 @@ void main() {
               reason: 'a gap or overlap before ${e.startBeat}');
           beat += e.durationBeats;
         }
-        // 4/4 only: Melody.totalBeats is measures * 4, and anything short
-        // would leave the metronome running past the last note.
-        expect(beat, song.measures * 4.0);
+        // 4/4 only, plus any anacrusis: anything short would leave the
+        // metronome running past the last note.
+        expect(beat, song.measures * 4.0 + song.pickupBeats);
+        expect(beat, song.melody.totalBeats);
+      });
+
+      test('${song.name}: the pickup is a whole number of beats', () {
+        // The metronome accents on `(beat - pickup) % 4`, so a fractional
+        // pickup would drift the downbeat off the click.
+        expect(song.pickupBeats, song.pickupBeats.roundToDouble());
+        expect(song.pickupBeats, lessThan(4));
+        expect(song.pickupBeats, greaterThanOrEqualTo(0));
       });
 
       test('${song.name}: only eighths, quarters and halves', () {
@@ -50,7 +60,8 @@ void main() {
           if (e.isRest) continue;
           expect(e.pitch!.semitone, inInclusiveRange(0, semitoneCount - 1));
         }
-        // No pickup bars: a melody begins at beat 0, and on a note.
+        // Event beats run from the first sounding note — the pickup when
+        // there is one — so beat 0 is always a note, never a rest or a gap.
         expect(song.events.first.startBeat, 0.0);
         expect(song.events.first.isRest, isFalse);
         expect(song.melody.pitchEvents.length, greaterThanOrEqualTo(2));
@@ -184,6 +195,65 @@ void main() {
     expect(c.phase, Phase.summary);
     expect(c.melody, isNotNull);
     c.dispose();
+  });
+
+  // --------------------------------------------------------------- pickups
+
+  test('pickup support is actually exercised by the library', () {
+    final withPickup = kSongs.where((s) => s.pickupBeats > 0).toList();
+    expect(withPickup, isNotEmpty);
+    for (final s in withPickup) {
+      // The lead-in events must exactly fill the anacrusis — a note straddling
+      // the downbeat would put the barline through the middle of it.
+      var beat = 0.0;
+      var landsOnDownbeat = false;
+      for (final e in s.events) {
+        if (beat == s.pickupBeats) landsOnDownbeat = true;
+        beat += e.durationBeats;
+      }
+      expect(landsOnDownbeat, isTrue,
+          reason: '${s.name} has no event starting on the downbeat');
+    }
+  });
+
+  test('a pickup song carries its anacrusis into the round', () {
+    final c = freshController();
+    c.setMode(GameMode.songs);
+    final i = kSongs.indexWhere((s) => s.pickupBeats > 0);
+    c.updateSettings(c.settings.copyWith(songIndex: i));
+    c.playRound();
+    expect(c.melody!.pickupBeats, kSongs[i].pickupBeats);
+    // Timeline offsets derive from totalBeats, so the pickup must be in it.
+    expect(c.melody!.totalBeats, kSongs[i].measures * 4 + kSongs[i].pickupBeats);
+    c.dispose();
+  });
+
+  test('a song without a pickup is unchanged', () {
+    final plain = kSongs.firstWhere((s) => s.pickupBeats == 0);
+    expect(plain.melody.pickupBeats, 0);
+    expect(plain.melody.totalBeats, plain.measures * 4.0);
+  });
+
+  testWidgets('the staff renders a pickup melody', (tester) async {
+    tester.view.physicalSize = const Size(1000, 400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final song = kSongs.firstWhere((s) => s.pickupBeats > 0);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: StaffView(
+          judged: [
+            for (final e in song.events) JudgedEvent(e)..revealed = true,
+          ],
+          measures: song.measures,
+          playheadBeat: null,
+          secondsPerBeat: 0.75,
+          pickupBeats: song.pickupBeats,
+        ),
+      ),
+    ));
+    expect(tester.takeException(), isNull);
   });
 
   // ----------------------------------------------------------- song picker

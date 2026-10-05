@@ -618,6 +618,10 @@ class _GameScreenState extends State<GameScreen> {
                     secondsPerBeat: c.secondsPerBeat,
                     neutralInk: c.freePlay,
                     wrongDyad: c.echoMode,
+                    pickupBeats: c.echoMode || c.freePlay
+                        ? 0
+                        : c.melody?.pickupBeats ??
+                            (c.songsMode ? c.song.pickupBeats : 0),
                   ),
                 ),
               ],

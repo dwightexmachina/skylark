@@ -31,9 +31,14 @@ class Song {
   final int measures;
   final List<NoteEvent> events;
 
-  const Song(this.name, this.measures, this.events);
+  /// Beats of anacrusis before the downbeat. The leading [pickupBeats] worth
+  /// of events are the lead-in; [measures] counts only the full bars after
+  /// it, so a song's events total `measures * 4 + pickupBeats`.
+  final double pickupBeats;
 
-  Melody get melody => Melody(events, measures);
+  const Song(this.name, this.measures, this.events, {this.pickupBeats = 0});
+
+  Melody get melody => Melody(events, measures, pickupBeats: pickupBeats);
 
   /// The distinct semitones the tune uses, low to high.
   List<int> get semitones {
@@ -80,6 +85,14 @@ List<NoteEvent> _layout(List<(int, double)> notes) {
 // Semitones from C4: C 0 · D 2 · E 4 · F 5 · G 7 · A 9 · B 11 · C5 12.
 
 final List<Song> kSongs = [
+  // ------------------------------------------------------------- two notes
+
+  // G E G E | G G E–  (a sol-mi nursery chant — the smallest real tune here)
+  Song('Lucy Locket', 2, _layout(const [
+    (7, 1), (4, 1), (7, 1), (4, 1),
+    (7, 1), (7, 1), (4, 2),
+  ])),
+
   // ----------------------------------------------------------- three notes
 
   // C C C D | E– D– | C E D D | C– (two quarter rests close the bar, which
@@ -108,6 +121,24 @@ final List<Song> kSongs = [
     (2, 2), (0, 2),
   ])),
 
+  // G G E G | A G E–
+  Song('Camptown Races', 2, _layout(const [
+    (7, 1), (7, 1), (4, 1), (7, 1),
+    (9, 1), (7, 1), (4, 2),
+  ])),
+
+  // E E D C | C D E–
+  Song('Go Tell Aunt Rhody', 2, _layout(const [
+    (4, 1), (4, 1), (2, 1), (0, 1),
+    (0, 1), (2, 1), (4, 2),
+  ])),
+
+  // C E G G | E G E–
+  Song('Michael, Row the Boat Ashore', 2, _layout(const [
+    (0, 1), (4, 1), (7, 1), (7, 1),
+    (4, 1), (7, 1), (4, 2),
+  ])),
+
   // ------------------------------------------------------------ four notes
 
   // E D C D | E E E– | D D D– | E G G–
@@ -126,6 +157,21 @@ final List<Song> kSongs = [
     (4, 1), (4, 1), (4, 2),
     (4, 1), (7, 1), (0, 1), (2, 1),
     (4, 2), (_rest, 1), (_rest, 1),
+  ])),
+
+  // C E G G | A G E–
+  Song('Kum Ba Yah', 2, _layout(const [
+    (0, 1), (4, 1), (7, 1), (7, 1),
+    (9, 1), (7, 1), (4, 2),
+  ])),
+
+  // (C E F) | G– C E | F G– –
+  // First song with an anacrusis: "Oh when the saints" leads in on three
+  // quarters before bar 1, and the phrase repeats straight into itself.
+  Song('When the Saints Go Marching In', 2, pickupBeats: 3, _layout(const [
+    (0, 1), (4, 1), (5, 1),
+    (7, 2), (0, 1), (4, 1),
+    (5, 1), (7, 2), (_rest, 1),
   ])),
 
   // ------------------------------------------------------------ five notes
@@ -199,7 +245,40 @@ final List<Song> kSongs = [
     (2, 1), (4, 1), (5, 2),
   ])),
 
+  // G F E D | C D E C
+  Song('Deck the Halls', 2, _layout(const [
+    (7, 1), (5, 1), (4, 1), (2, 1),
+    (0, 1), (2, 1), (4, 1), (0, 1),
+  ])),
+
+  // C G A E | F C F G — the ground bass, not the melody: eight steady
+  // quarters that most ears place immediately as a progression.
+  Song('Pachelbel\'s Canon', 2, _layout(const [
+    (0, 1), (7, 1), (9, 1), (4, 1),
+    (5, 1), (0, 1), (5, 1), (7, 1),
+  ])),
+
+  // (CD) | E G G A | G E C D | E E D C | D–
+  // One beat of anacrusis, as a beamed eighth pair. The dotted "ban-jo on my
+  // knee" figure is evened out like the others.
+  Song('Oh! Susanna', 4, pickupBeats: 1, _layout(const [
+    (0, 0.5), (2, 0.5),
+    (4, 1), (7, 1), (7, 1), (9, 1),
+    (7, 1), (4, 1), (0, 1), (2, 1),
+    (4, 1), (4, 1), (2, 1), (0, 1),
+    (2, 2), (_rest, 1), (_rest, 1),
+  ])),
+
   // ------------------------------------------------------------- six notes
+
+  // C D E F | G– G– | A A A A | G–
+  // A rising scale, where Joy to the World is the falling one.
+  Song('All My Little Ducklings', 4, _layout(const [
+    (0, 1), (2, 1), (4, 1), (5, 1),
+    (7, 2), (7, 2),
+    (9, 1), (9, 1), (9, 1), (9, 1),
+    (7, 2), (_rest, 1), (_rest, 1),
+  ])),
 
   // C C G G | A A G– | F F E E | D D C–
   Song('Twinkle Twinkle Little Star', 4, _layout(const [

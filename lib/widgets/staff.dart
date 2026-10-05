@@ -19,6 +19,9 @@ class StaffView extends StatelessWidget {
   /// correct note in amber — instead of the lone target notehead.
   final bool wrongDyad;
 
+  /// Beats of anacrusis, drawn as a short partial bar ahead of measure 1.
+  final double pickupBeats;
+
   const StaffView({
     super.key,
     required this.judged,
@@ -27,13 +30,14 @@ class StaffView extends StatelessWidget {
     required this.secondsPerBeat,
     this.neutralInk = false,
     this.wrongDyad = false,
+    this.pickupBeats = 0,
   });
 
   @override
   Widget build(BuildContext context) {
     final palette = Palette.of(context);
     return LayoutBuilder(builder: (context, constraints) {
-      final minW = 300.0 * measures + 90;
+      final minW = 300.0 * (measures + pickupBeats / 4) + 90;
       final w = constraints.maxWidth.isFinite && constraints.maxWidth > minW
           ? constraints.maxWidth
           : minW;
@@ -53,6 +57,7 @@ class StaffView extends StatelessWidget {
                 palette: palette,
                 neutralInk: neutralInk,
                 wrongDyad: wrongDyad,
+                pickupBeats: pickupBeats,
               ),
             ),
           ),
@@ -70,6 +75,7 @@ class _StaffPainter extends CustomPainter {
   final Palette palette;
   final bool neutralInk;
   final bool wrongDyad;
+  final double pickupBeats;
 
   _StaffPainter({
     required this.judged,
@@ -79,6 +85,7 @@ class _StaffPainter extends CustomPainter {
     required this.palette,
     required this.neutralInk,
     required this.wrongDyad,
+    required this.pickupBeats,
   });
 
   static const double g = 9; // gap between staff lines
@@ -88,13 +95,26 @@ class _StaffPainter extends CustomPainter {
 
   late double _measureW;
 
+  /// Width of the partial lead-in bar; 0 when the melody has no pickup.
+  double get _pickupW => pickupBeats / 4 * _measureW;
+
+  /// X of the first full measure — the downbeat barline.
+  double get _barOneX => xLeft + _pickupW;
+
   double _letterY(int letter) => y0 + 4 * g - (letter - 2) * g / 2;
 
   double _beatToX(double beat) {
-    var m = beat ~/ 4;
+    // Inside the anacrusis: its own cramped little bar, with a lighter inset
+    // than a full measure gets since there's much less room to give.
+    if (pickupBeats > 0 && beat < pickupBeats) {
+      final frac = beat / pickupBeats;
+      return xLeft + pad / 2 + frac * (_pickupW - pad);
+    }
+    final b = beat - (pickupBeats > 0 ? pickupBeats : 0);
+    var m = b ~/ 4;
     if (m >= measures) m = measures - 1;
-    final frac = (beat - m * 4) / 4;
-    return xLeft + m * _measureW + pad + frac * (_measureW - 2 * pad);
+    final frac = (b - m * 4) / 4;
+    return _barOneX + m * _measureW + pad + frac * (_measureW - 2 * pad);
   }
 
   void _text(Canvas canvas, String s, Offset topLeft, double fontSize,
@@ -112,7 +132,9 @@ class _StaffPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    _measureW = (size.width - xLeft - 10) / measures;
+    // The lead-in bar is sized in proportion to its length, so a 1-beat
+    // pickup takes a quarter of a measure's width rather than a full one.
+    _measureW = (size.width - xLeft - 10) / (measures + pickupBeats / 4);
     final staffPaint = Paint()
       ..color = palette.staff
       ..strokeWidth = 2
@@ -126,8 +148,13 @@ class _StaffPainter extends CustomPainter {
       ..color = palette.staff
       ..strokeWidth = 2.2;
     for (var m = 0; m <= measures; m++) {
-      final x = m == 0 ? 12.0 : xLeft + m * _measureW;
+      final x = m == 0 ? 12.0 : _barOneX + m * _measureW;
       canvas.drawLine(Offset(x, y0), Offset(x, y0 + 4 * g), barPaint);
+    }
+    // The downbeat barline closing the anacrusis.
+    if (pickupBeats > 0) {
+      canvas.drawLine(
+          Offset(_barOneX, y0), Offset(_barOneX, y0 + 4 * g), barPaint);
     }
     // Final thick barline.
     canvas.drawLine(Offset(size.width - 6, y0), Offset(size.width - 6, y0 + 4 * g),
