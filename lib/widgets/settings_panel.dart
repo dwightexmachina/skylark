@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../logic/songs.dart';
 import '../models/note.dart';
 import '../models/round.dart';
 import '../models/settings.dart';
@@ -43,6 +44,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
             const SizedBox(height: 18),
             if (c.echoMode)
               ..._echoSections(p, c, s)
+            else if (c.songsMode)
+              ..._songSections(p, c, s)
             else ...[
             _head(p, 'Difficulty'),
             const SizedBox(height: 8),
@@ -86,27 +89,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
             const SizedBox(height: 6),
             _sub(p, 'Measures per round (1–4), in 4/4.'),
             const SizedBox(height: 20),
-            _head(p, 'Tempo'),
-            SliderTheme(
-              data: SliderThemeData(
-                activeTrackColor: p.tonicSoft,
-                inactiveTrackColor: p.soft,
-                thumbColor: p.accent,
-                overlayColor: p.accentSoft.withValues(alpha: 0.5),
-                trackHeight: 8,
-                thumbShape:
-                    const RoundSliderThumbShape(enabledThumbRadius: 11),
-              ),
-              child: Slider(
-                value: s.bpm.toDouble(),
-                min: 40,
-                max: 140,
-                divisions: 20,
-                onChanged: (v) =>
-                    c.updateSettings(s.copyWith(bpm: v.round())),
-              ),
-            ),
-            _sub(p, '♩ = ${s.bpm} BPM (40–140)'),
+            ..._tempo(p, c, s),
             const SizedBox(height: 20),
             InkWell(
               onTap: () => setState(() => _moreOpen = !_moreOpen),
@@ -202,6 +185,104 @@ class _SettingsPanelState extends State<SettingsPanel> {
         ),
       ),
     );
+  }
+
+  /// Songs' whole sidebar: pick a tune, set the pulse, set how strict the
+  /// beat is. No difficulty preset (the song *is* the difficulty, and the
+  /// list is ordered easiest first), no note chips (the song decides which
+  /// keys are live), no length (the song decides that too).
+  List<Widget> _songSections(Palette p, GameController c, Settings s) {
+    final song = c.song;
+    final index = s.songIndex.clamp(0, kSongs.length - 1);
+    return [
+      _head(p, 'Song'),
+      const SizedBox(height: 8),
+      // The library is long enough to push the rest of the sidebar off the
+      // page, so it scrolls within its own box instead.
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 322),
+        child: ListView.separated(
+          padding: EdgeInsets.zero,
+          shrinkWrap: true,
+          itemCount: kSongs.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 6),
+          itemBuilder: (context, i) => _songRow(p, c, i, i == index),
+        ),
+      ),
+      const SizedBox(height: 10),
+      _sub(
+          p,
+          'In C, 4/4 — ${song.measures} measures. '
+              'Notes you’ll need: ${song.noteLabels}.'),
+      const SizedBox(height: 20),
+      ..._tempo(p, c, s),
+      const SizedBox(height: 20),
+      _head(p, 'Timing window'),
+      const SizedBox(height: 8),
+      _segmented<TimingWindow>(
+        p,
+        values: TimingWindow.values,
+        selected: s.window,
+        label: (w) => w.label,
+        // Unlike Training's copy of this control, no difficulty to mark
+        // custom — Songs never shows a preset to deviate from.
+        onTap: (w) => c.updateSettings(s.copyWith(window: w)),
+      ),
+      const SizedBox(height: 6),
+      _sub(p, 'How far off the beat a note may land: ±½ · ±¼ · ±⅛ beat.'),
+    ];
+  }
+
+  Widget _songRow(Palette p, GameController c, int index, bool on) {
+    final song = kSongs[index];
+    return InkWell(
+      onTap: () => c.updateSettings(c.settings.copyWith(songIndex: index)),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: on ? p.accent : p.surface,
+          border: Border.all(color: on ? p.accentShadow : p.line, width: 2),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+                color: on ? p.accentShadow : p.btnShadow,
+                offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Text(song.name,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: on ? p.onAccent : p.staffInk)),
+      ),
+    );
+  }
+
+  /// Shared by Training and Songs — both run on the metronome.
+  List<Widget> _tempo(Palette p, GameController c, Settings s) {
+    return [
+      _head(p, 'Tempo'),
+      SliderTheme(
+        data: SliderThemeData(
+          activeTrackColor: p.tonicSoft,
+          inactiveTrackColor: p.soft,
+          thumbColor: p.accent,
+          overlayColor: p.accentSoft.withValues(alpha: 0.5),
+          trackHeight: 8,
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 11),
+        ),
+        child: Slider(
+          value: s.bpm.toDouble(),
+          min: 40,
+          max: 140,
+          divisions: 20,
+          onChanged: (v) => c.updateSettings(s.copyWith(bpm: v.round())),
+        ),
+      ),
+      _sub(p, '♩ = ${s.bpm} BPM (40–140)'),
+    ];
   }
 
   /// Echo's whole sidebar: no difficulty preset, no tempo, no Log grouping

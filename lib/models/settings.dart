@@ -58,6 +58,10 @@ class Settings {
   /// 0.25-2.0 in quarter-second steps.
   final double echoNoteLag;
 
+  /// Songs: index into `kSongs` of the tune to play. Clamped on read, so
+  /// shrinking the library can never strand this out of range.
+  final int songIndex;
+
   const Settings({
     this.noteSet = const {0, 2, 4, 5, 7, 12}, // C D E F G + C5
     this.measures = 1,
@@ -74,6 +78,7 @@ class Settings {
     this.noteWeights = const {},
     this.echoReplays = ReplayBudget.one,
     this.echoNoteLag = 0.5,
+    this.songIndex = 0,
   });
 
   Settings copyWith({
@@ -91,6 +96,7 @@ class Settings {
     Map<int, int>? noteWeights,
     ReplayBudget? echoReplays,
     double? echoNoteLag,
+    int? songIndex,
   }) {
     return Settings(
       noteSet: noteSet ?? this.noteSet,
@@ -107,6 +113,7 @@ class Settings {
       noteWeights: noteWeights ?? this.noteWeights,
       echoReplays: echoReplays ?? this.echoReplays,
       echoNoteLag: echoNoteLag ?? this.echoNoteLag,
+      songIndex: songIndex ?? this.songIndex,
     );
   }
 

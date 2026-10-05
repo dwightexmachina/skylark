@@ -206,6 +206,25 @@ class RoundLogPop extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: e.won ? p.good : p.bad)),
         ),
+        if (e.songName != null) ...[
+          const SizedBox(width: 6),
+          Tooltip(
+            message: 'Songs: ${e.songName}',
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: p.tonicSoft,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text('♫ ${e.songName}',
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: p.tonic)),
+            ),
+          ),
+        ],
         if (e.echo) ...[
           const SizedBox(width: 6),
           Tooltip(

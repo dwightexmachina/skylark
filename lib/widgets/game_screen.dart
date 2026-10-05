@@ -165,6 +165,7 @@ class _GameScreenState extends State<GameScreen> {
                         onTime: controller.roundOnTime,
                         pitchTotal: controller.roundPitchTotal,
                         streak: controller.streak,
+                        songs: controller.songsMode,
                         onDismiss: _dismissPop,
                         onNext: () {
                           _dismissPop();
@@ -513,6 +514,7 @@ class _GameScreenState extends State<GameScreen> {
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         chip('Training', c.mode == GameMode.training,
             () => c.setMode(GameMode.training)),
+        chip('Songs', c.songsMode, () => c.setMode(GameMode.songs)),
         chip('Echo', c.echoMode, () => c.setMode(GameMode.echo)),
         chip('Free play', c.freePlay, () => c.setMode(GameMode.freePlay)),
       ]),
@@ -605,7 +607,13 @@ class _GameScreenState extends State<GameScreen> {
                     judged: display,
                     measures: c.echoMode
                         ? ((display.length + 3) ~/ 4).clamp(1, 2)
-                        : c.melody?.measures ?? c.settings.measures,
+                        : c.melody?.measures ??
+                            // Before the first round there's no melody to ask;
+                            // in Songs the selected tune's length still beats
+                            // the Training measures setting.
+                            (c.songsMode
+                                ? c.song.measures
+                                : c.settings.measures),
                     playheadBeat: c.playheadBeat,
                     secondsPerBeat: c.secondsPerBeat,
                     neutralInk: c.freePlay,
@@ -878,6 +886,12 @@ class _GameScreenState extends State<GameScreen> {
     final measures = c.melody?.measures ?? c.settings.measures;
     switch (c.phase) {
       case Phase.idle:
+        if (c.songsMode) {
+          return (
+            '${c.song.name} — ready when you are',
+            'Press Play song to hear it once, then play it back in time.'
+          );
+        }
         return (
           'Ready when you are',
           'Press Play round. Active keys are free to try any time.'
@@ -900,11 +914,17 @@ class _GameScreenState extends State<GameScreen> {
         return ('Your turn — measure $m, beat $b',
             'Stay with the beat — you’ve got this!');
       case Phase.summary:
+        final what = c.songsMode ? c.song.name : 'Round ${c.roundNumber}';
+        final sub = c.songsMode
+            ? (c.streak > 0
+                ? 'Perfect — streak ${c.streak}! Play it again, or pick another song.'
+                : 'Hear it again to study, play it again, or pick another song.')
+            : (c.streak > 0
+                ? 'Perfect round — streak ${c.streak}! Replay to study, or press Next round.'
+                : 'Replay to study the melody, or press Next round.');
         return (
-          'Round ${c.roundNumber}: ${c.roundPitchCorrect}/${c.roundPitchTotal} pitches · ${c.roundOnTime}/${c.roundPitchTotal} on time',
-          c.streak > 0
-              ? 'Perfect round — streak ${c.streak}! Replay to study, or press Next round.'
-              : 'Replay to study the melody, or press Next round.'
+          '$what: ${c.roundPitchCorrect}/${c.roundPitchTotal} pitches · ${c.roundOnTime}/${c.roundPitchTotal} on time',
+          sub
         );
     }
   }
@@ -953,7 +973,11 @@ class _GameScreenState extends State<GameScreen> {
           key: _playKey,
           child: _button(
             p,
-            c.phase == Phase.summary ? '▶  Next round' : '▶  Play round',
+            // "Round" is Training's unit — a freshly generated melody each
+            // time. A song is one fixed riff, so Songs says what it means.
+            c.songsMode
+                ? (c.phase == Phase.summary ? '▶  Play again' : '▶  Play song')
+                : (c.phase == Phase.summary ? '▶  Next round' : '▶  Play round'),
             primary: !c.paused,
             onTap: active ? null : c.playRound,
           ),
@@ -962,8 +986,11 @@ class _GameScreenState extends State<GameScreen> {
           _button(p, c.paused ? '▶  Resume' : '❚❚  Pause',
               blue: !c.paused, primary: c.paused, onTap: c.togglePause),
         if (c.melody != null && !active)
-          _button(p, '↻  Replay melody', onTap: c.replay),
-        if (active) _button(p, 'Skip round', ghost: true, onTap: c.skip),
+          _button(p, c.songsMode ? '↻  Hear it again' : '↻  Replay melody',
+              onTap: c.replay),
+        if (active)
+          _button(p, c.songsMode ? 'Stop' : 'Skip round',
+              ghost: true, onTap: c.skip),
       ],
     );
   }

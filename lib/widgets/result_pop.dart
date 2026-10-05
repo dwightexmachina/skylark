@@ -15,6 +15,10 @@ class ResultPop extends StatefulWidget {
   final int onTime;
   final int pitchTotal;
   final int streak;
+
+  /// Songs mode: the melody is one fixed riff, so "next" replays the same
+  /// tune rather than dealing a new one. The copy says so.
+  final bool songs;
   final VoidCallback onDismiss;
   final VoidCallback onNext;
   final VoidCallback onReplay;
@@ -26,6 +30,7 @@ class ResultPop extends StatefulWidget {
     required this.onTime,
     required this.pitchTotal,
     required this.streak,
+    this.songs = false,
     required this.onDismiss,
     required this.onNext,
     required this.onReplay,
@@ -123,28 +128,50 @@ class _ResultPopState extends State<ResultPop> with TickerProviderStateMixin {
     }
 
     return Stack(children: [
+      // Dim only — never a hit target, so it can't swallow a click.
       Positioned.fill(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onDismiss,
+        child: IgnorePointer(
           child: ColoredBox(
               color: p.isNight
                   ? const Color(0xFF06091C).withValues(alpha: 0.5)
                   : const Color(0xFF1E325A).withValues(alpha: 0.35)),
         ),
       ),
-      Center(child: animated),
+      // A translucent Listener receives the press but reports no hit, so the
+      // press also reaches whatever sits behind the pop. That's what lets a
+      // single click on the sidebar dismiss this *and* land on the control —
+      // picking a different song straight from the result takes one click,
+      // not one to dismiss and another to choose.
+      Positioned.fill(
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => widget.onDismiss(),
+        ),
+      ),
+      // The card itself absorbs, so clicking its body isn't a dismiss and its
+      // buttons keep working.
+      Center(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {},
+          child: animated,
+        ),
+      ),
     ]);
   }
 
   Widget _content(Palette p) {
     final t = widget.tier;
+    final songs = widget.songs;
+    final next = songs ? '▶  Play again' : '▶  Next round';
     final (title, titleColor) = switch (t) {
-      ResultTier.perfect =>
-        ('Perfect round!', p.isNight ? p.accent : p.keyHeldText),
+      ResultTier.perfect => (
+          songs ? 'Perfect!' : 'Perfect round!',
+          p.isNight ? p.accent : p.keyHeldText
+        ),
       ResultTier.good =>
         ('Nice ear!', p.isNight ? p.good : const Color(0xFF3E7C4F)),
-      ResultTier.lost => ('Round lost', p.staffInk),
+      ResultTier.lost => (songs ? 'Not quite' : 'Round lost', p.staffInk),
     };
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -182,20 +209,18 @@ class _ResultPopState extends State<ResultPop> with TickerProviderStateMixin {
           mainAxisAlignment: MainAxisAlignment.center,
           children: switch (t) {
             ResultTier.perfect => [
-                _btn(p, '▶  Next round', style: _B.primary,
-                    onTap: widget.onNext),
+                _btn(p, next, style: _B.primary, onTap: widget.onNext),
               ],
             ResultTier.good => [
                 _btn(p, '↻  Replay', style: _B.blue, onTap: widget.onReplay),
                 const SizedBox(width: 10),
-                _btn(p, '▶  Next round', style: _B.primary,
-                    onTap: widget.onNext),
+                _btn(p, next, style: _B.primary, onTap: widget.onNext),
               ],
             ResultTier.lost => [
                 _btn(p, '↻  Hear it again', style: _B.primary,
                     onTap: widget.onReplay),
                 const SizedBox(width: 10),
-                _btn(p, '▶  Next round', style: _B.plain, onTap: widget.onNext),
+                _btn(p, next, style: _B.plain, onTap: widget.onNext),
               ],
           },
         ),

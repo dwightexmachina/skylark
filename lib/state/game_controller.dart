@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../audio/audio_engine.dart';
 import '../logic/generator.dart';
+import '../logic/songs.dart';
 import '../models/note.dart';
 import '../models/round.dart';
 import '../models/settings.dart';
@@ -68,8 +69,14 @@ class GameController extends ChangeNotifier {
   /// scheduled notes, and metronome exactly in place.
   bool paused = false;
 
-  // Mode: training (dictation), echo (mystery-note streaming), or free play.
+  // Mode: training (dictation), echo (mystery-note streaming), songs (canned
+  // tunes through the training timeline), or free play.
   GameMode mode = GameMode.echo;
+
+  /// The note set in force outside Songs mode. Songs overrides the keyboard
+  /// with [kSongsNoteSet] so every tune is playable; this remembers what the
+  /// player had picked so Training and Echo get it back on the way out.
+  Set<int>? _noteSetBeforeSongs;
 
   /// Playing surface: piano keys or guitar fingerboard. Kept coherent with
   /// the tone: guitar tones show the fingerboard, everything else the keys.
@@ -91,6 +98,10 @@ class GameController extends ChangeNotifier {
   bool get freePlay => mode == GameMode.freePlay;
   // Named echoMode, not echo: `echo` below is Free Play's echoed-note list.
   bool get echoMode => mode == GameMode.echo;
+  bool get songsMode => mode == GameMode.songs;
+
+  /// The selected tune. Clamped, so a shrunken library can't strand the index.
+  Song get song => kSongs[settings.songIndex.clamp(0, kSongs.length - 1)];
   final List<Pitch> echo = []; // notes echoed onto the staff (Free Play)
   bool metronomeOn = false;
   Timer? _metroTimer;
@@ -142,7 +153,9 @@ class GameController extends ChangeNotifier {
       return;
     }
     roundNumber++;
-    melody = generateMelody(settings, _rng);
+    // Songs differ from Training in exactly one way: a fixed melody off the
+    // shelf instead of a generated one. Everything downstream is shared.
+    melody = songsMode ? song.melody : generateMelody(settings, _rng);
     _startTimeline();
   }
 
@@ -621,6 +634,7 @@ class GameController extends ChangeNotifier {
         RoundLogEntry(
           number: roundLog.length + 1,
           won: allGood,
+          songName: songsMode ? song.name : null,
           notes: [
             for (final j in judged)
               if (!j.isRest)
@@ -692,6 +706,18 @@ class GameController extends ChangeNotifier {
     _clearPause();
     if (ppStreaming) stopPP(); // commits any partial batch to the log
     mode = value;
+    // Songs owns the keyboard while it's selected: a tune the player can't
+    // physically play back would be unanswerable, since `noteOn` ignores
+    // anything outside the note set. Assigned directly rather than through
+    // `updateSettings` — only the note set moves, so there's no tone to
+    // preload and no active round to guard against.
+    if (value == GameMode.songs) {
+      _noteSetBeforeSongs ??= settings.noteSet;
+      settings = settings.copyWith(noteSet: kSongsNoteSet);
+    } else if (_noteSetBeforeSongs != null) {
+      settings = settings.copyWith(noteSet: _noteSetBeforeSongs);
+      _noteSetBeforeSongs = null;
+    }
     _ticker?.cancel();
     _ticker = null;
     _ppTimer?.cancel();
@@ -794,11 +820,25 @@ class GameController extends ChangeNotifier {
         _lastPianoTone = next.tone;
       }
     }
+    // Picking a different song clears the board. Without this the staff would
+    // keep showing the finished tune's notes under a header naming the new
+    // one. Safe to reset here: an active round already returned above, so
+    // this only ever fires from idle or the post-round summary.
+    if (songsMode && next.songIndex != settings.songIndex) {
+      engine.stopAll();
+      melody = null;
+      judged = [];
+      phase = Phase.idle;
+      roundPitchCorrect = 0;
+      roundOnTime = 0;
+      roundPitchTotal = 0;
+    }
     settings = next;
     notifyListeners();
   }
 
   void toggleNote(int semitone) {
+    if (songsMode) return; // the tune decides which keys are live
     final set = {...settings.noteSet};
     final weights = {...settings.noteWeights};
     if (set.contains(semitone)) {

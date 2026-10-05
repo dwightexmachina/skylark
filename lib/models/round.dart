@@ -40,6 +40,8 @@ class RoundLogEntry {
   /// Echo at 1 note per round, which degenerates to a flat row of
   /// independent 1-note rounds with no position to track.
   final List<List<LoggedNote>>? echoRounds;
+  /// Songs: the tune this round asked for. Null for every other mode.
+  final String? songName;
   final List<LoggedNote> notes;
   final int pitchCorrect, onTime, pitchTotal;
   const RoundLogEntry({
@@ -48,6 +50,7 @@ class RoundLogEntry {
     this.echo = false,
     this.echoNoteCount = 0,
     this.echoRounds,
+    this.songName,
     required this.notes,
     required this.pitchCorrect,
     required this.onTime,
@@ -57,8 +60,8 @@ class RoundLogEntry {
 
 enum Phase { idle, tonic, countIn, listening, userCount, performing, summary }
 
-/// The three ways to use Skylark.
-enum GameMode { training, freePlay, echo }
+/// The four ways to use Skylark.
+enum GameMode { training, freePlay, echo, songs }
 
 /// Which playing surface is shown: piano keys or a guitar fingerboard.
 /// Purely visual — notes, computer keys, and audio are identical.
